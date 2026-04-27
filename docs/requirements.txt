@@ -1,0 +1,5 @@
+# Build dependencies for LignoForge documentation
+sphinx>=7.0
+sphinx-rtd-theme>=2.0
+sphinx-design>=0.5
+sphinxcontrib-napoleon>=0.7

@@ -1,0 +1,19 @@
+; GROMACS residuetypes.dat supplement for LignoForge lignin monomers
+; Add these lines to oplsaa.ff/residuetypes.dat (or a custom residuetypes.dat)
+; so that pdb2gmx recognises all LignoForge residue names.
+;
+; Format:  residue_name    type
+; type "Other" = standard small-molecule / non-amino-acid residue.
+;
+; β-O-4 internal chain units
+GYU     Other
+HPU     Other
+SYU     Other
+; Isolated free monolignols
+GYM     Other
+HPM     Other
+SYM     Other
+; Neutral saturated references
+GNM     Other
+HNM     Other
+SNM     Other

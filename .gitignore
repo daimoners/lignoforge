@@ -1,0 +1,57 @@
+
+# ── Python build artefacts ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+*.tar.gz
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env/
+ENV/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb.bak
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# ── IDE / editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.lnk
+
+# ── Sphinx docs build output ──────────────────────────────────────────────────
+docs/build/
+
+# ── Simulation / test output and temporary directories ───────────────────────
+demo_output*/
+lignoforge_results*/
+tmp_*/
+*_output/
+
+# ── Type-assignment tool temporary test directories ───────────────────────────
+/tmp/test_assign_*/
+
+# ── Generated PDB / RTP artefacts in repo root ───────────────────────────────
+/*.pdb
+/*.rtp
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

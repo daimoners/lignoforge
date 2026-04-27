@@ -1,0 +1,10 @@
+{
+  "material_origin": {
+    "lignin_type": "kraft_lignin",
+    "biomass_type": "hardwood"
+  },
+
+  "extraction_process": {
+    "process_type": "kraft"
+  }
+}

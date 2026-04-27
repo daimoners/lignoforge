@@ -1,0 +1,332 @@
+{
+  "type": "object",
+  "title": "IndustrialLigninInput",
+  "description": "Hierarchical specification of lignin descriptors from experiments, datasheets, and literature for top-down polymer generation",
+  "required": ["material_origin", "extraction_process"],
+
+  "properties": {
+
+    "material_origin": {
+      "type": "object",
+      "required": ["biomass_type"],
+      "properties": {
+        "lignin_type": {
+          "type": "string",
+          "enum": ["kraft_lignin", "organosolv_lignin", "soda_lignin", "lignosulfonate", "native_mwl", "technical_lignin", "unknown"]
+        },
+        "biomass_type": {
+          "type": "string",
+          "enum": ["softwood", "hardwood", "agricultural_residue", "mixed"]
+        },
+        "species": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "plant_part": {
+          "type": "string",
+          "enum": ["wood", "bark", "straw", "husk", "mixed"]
+        },
+        "geographical_source": {
+          "type": "string"
+        },
+        "supplier_or_reference": {
+          "type": "string"
+        },
+        "batch_id": {
+          "type": "string"
+        }
+      }
+    },
+
+    "extraction_process": {
+      "type": "object",
+      "required": ["process_type"],
+      "properties": {
+        "process_type": {
+          "type": "string",
+          "enum": ["kraft", "soda", "organosolv", "sulfite", "des", "steam_explosion"]
+        },
+        "recovery_or_purification": {
+          "type": "string",
+          "enum": ["acid_precipitation", "ultrafiltration", "solvent_fractionation", "ion_exchange", "none", "unknown"]
+        },
+        "severity_factor": {
+          "type": "number"
+        },
+        "temperature_C": {
+          "type": "number"
+        },
+        "pH": {
+          "type": "number"
+        },
+        "solvent_system": {
+          "type": "string"
+        },
+        "catalyst": {
+          "type": "string"
+        },
+        "residence_time_min": {
+          "type": "number"
+        },
+        "liquor_to_solid_ratio": {
+          "type": "number"
+        }
+      }
+    },
+
+    "batch_properties": {
+      "type": "object",
+      "properties": {
+        "Mw": {
+          "type": "object",
+          "properties": {
+            "Mn": { "type": "number", "minimum": 0 },
+            "Mw": { "type": "number", "minimum": 0 },
+            "Mz": { "type": "number", "minimum": 0 },
+            "PDI": { "type": "number", "minimum": 1 }
+          }
+        },
+        "analysis_method": {
+          "type": "string",
+          "enum": ["gpc", "sec", "maldi", "viscometry", "unknown"]
+        },
+        "purity_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "yield_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ash_content": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "moisture_content": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "carbohydrate_impurities": {
+          "type": "object",
+          "properties": {
+            "glucan": { "type": "number", "minimum": 0, "maximum": 1 },
+            "xylan": { "type": "number", "minimum": 0, "maximum": 1 },
+            "arabinan": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+
+    "chemical_composition": {
+      "type": "object",
+      "properties": {
+        "elemental_composition": {
+          "type": "object",
+          "properties": {
+            "C": { "type": "number", "minimum": 0, "maximum": 100 },
+            "H": { "type": "number", "minimum": 0, "maximum": 100 },
+            "O": { "type": "number", "minimum": 0, "maximum": 100 },
+            "S": { "type": "number", "minimum": 0, "maximum": 100 },
+            "N": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "S_G_H_ratio": {
+          "type": "object",
+          "properties": {
+            "S": { "type": "number", "minimum": 0, "maximum": 1 },
+            "G": { "type": "number", "minimum": 0, "maximum": 1 },
+            "H": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "functional_groups": {
+          "type": "object",
+          "properties": {
+            "phenolic_OH": { "type": "number" },
+            "aliphatic_OH": { "type": "number" },
+            "methoxyl_content": { "type": "number" },
+            "carbonyl_content": { "type": "number" }
+          }
+        },
+        "bonding_profile": {
+          "type": "object",
+          "properties": {
+            "beta_O_4_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+            "beta_5_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+            "beta_beta_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+            "five_five_fraction": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "methoxyl_per_C9": {
+          "type": "number",
+          "minimum": 0
+        },
+        "carboxyl_per_C9": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reference_basis": {
+          "type": "string",
+          "enum": ["dry_basis", "as_received", "unknown"]
+        }
+      }
+    },
+
+    "molecular_statistics": {
+      "type": "object",
+      "properties": {
+        "chain_length_distribution": {
+          "type": "object",
+          "properties": {
+            "mean_DP": { "type": "number" },
+            "variance_DP": { "type": "number" }
+          }
+        },
+        "branching_index": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "condensation_degree": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "aromaticity_index": {
+          "type": "number"
+        },
+        "beta_O_4_content_per_100Ar": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dPDI_from_SEC": {
+          "type": "number",
+          "minimum": 1
+        }
+      }
+    },
+
+    "spectroscopic_data": {
+      "type": "object",
+      "properties": {
+        "nmr_2d_hsqc": {
+          "type": "object",
+          "properties": {
+            "S_units_per_100Ar": { "type": "number", "minimum": 0 },
+            "G_units_per_100Ar": { "type": "number", "minimum": 0 },
+            "H_units_per_100Ar": { "type": "number", "minimum": 0 },
+            "A_beta_O_4_per_100Ar": { "type": "number", "minimum": 0 },
+            "B_beta_5_per_100Ar": { "type": "number", "minimum": 0 },
+            "C_beta_beta_per_100Ar": { "type": "number", "minimum": 0 },
+            "D_5_5_per_100Ar": { "type": "number", "minimum": 0 }
+          }
+        },
+        "ftir": {
+          "type": "object",
+          "properties": {
+            "A1510": { "type": "number", "minimum": 0 },
+            "A1600": { "type": "number", "minimum": 0 },
+            "A1700": { "type": "number", "minimum": 0 },
+            "A3400": { "type": "number", "minimum": 0 }
+          }
+        },
+        "uv_vis": {
+          "type": "object",
+          "properties": {
+            "lambda_max_nm": { "type": "number", "minimum": 0 },
+            "absorptivity_L_g_cm": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+
+    "thermal_properties": {
+      "type": "object",
+      "properties": {
+        "glass_transition_temperature_C": { "type": "number" },
+        "decomposition_onset_C": { "type": "number" },
+        "char_yield_700C_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "dsc_method": { "type": "string" },
+        "tga_atmosphere": { "type": "string" }
+      }
+    },
+
+    "functional_properties": {
+      "type": "object",
+      "properties": {
+        "solubility": {
+          "type": "object",
+          "properties": {
+            "water": { "type": "number" },
+            "ethanol": { "type": "number" },
+            "alkaline": { "type": "number" }
+          }
+        },
+        "glass_transition_temperature": {
+          "type": "number"
+        },
+        "reactivity_index": {
+          "type": "number"
+        },
+        "antioxidant_activity": {
+          "type": "number"
+        },
+        "radical_scavenging_ic50_mg_L": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+
+    "application_context": {
+      "type": "object",
+      "properties": {
+        "target_application": {
+          "type": "string",
+          "enum": ["coating", "adhesive", "composite", "hydrogel", "carbon_material", "packaging"]
+        },
+        "processing_method": {
+          "type": "string",
+          "enum": ["spray_coating", "dip_coating", "extrusion", "casting", "self_assembly"]
+        },
+        "substrate": {
+          "type": "string"
+        },
+        "solvent_environment": {
+          "type": "string"
+        },
+        "target_performance": {
+          "type": "object",
+          "properties": {
+            "min_modulus_MPa": { "type": "number", "minimum": 0 },
+            "min_tensile_strength_MPa": { "type": "number", "minimum": 0 },
+            "max_water_uptake_fraction": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "data_source_type": {
+          "type": "string",
+          "enum": ["experiment", "datasheet", "literature", "estimated", "mixed"]
+        },
+        "reference": {
+          "type": "string"
+        },
+        "doi": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+
+  }
+}
