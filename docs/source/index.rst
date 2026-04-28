@@ -4,6 +4,13 @@
 LignoForge — Lignin Structural Modelling Framework
 ======================================================
 
+.. image:: _static/LignoForge_logo.png
+   :alt: LignoForge logo
+   :width: 260px
+   :align: center
+
+|
+
 .. rubric:: Version |release|
 
 LignoForge is a **top-down, data-driven Python framework** for the automated

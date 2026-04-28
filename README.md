@@ -1,5 +1,9 @@
 # LignoForge
 
+<p align="center">
+  <img src="LignoForge_logo.png" alt="LignoForge logo" width="300"/>
+</p>
+
 > **Top-down stochastic generation of lignin structural models**  
 > From experimental constraints to atomistic polymer ensembles
 

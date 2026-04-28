@@ -64,6 +64,7 @@ html_theme_options = {
 }
 html_static_path = ["_static"]
 html_css_files   = ["css/custom.css"]
+html_logo        = "_static/LignoForge_logo.png"
 html_title       = "LignoForge Documentation"
 html_short_title = "LignoForge"
 
