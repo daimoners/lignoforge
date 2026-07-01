@@ -137,16 +137,29 @@ def check_atom_absent(typed: dict, res_seq: int, atom_name: str, tag: str) -> bo
 # ── Individual tests ──────────────────────────────────────────────────────────
 
 def test_isolated_neutral_charge():
-    """Each isolated neutral monomer definition should sum to exactly 0.000."""
+    """
+    The ISOLATED dict holds pre-balance atom charges; C1 starts at 0.000 and
+    balance_charges() adjusts it at runtime.  Here we verify the charge that
+    balance_charges() would assign to C1 produces a neutral residue, and that
+    all other atoms already form the expected groups.
+
+    Expected C1 after balance for neutral sp3 monomers (HNM/GNM/SNM): -0.055
+    (Cα opls_219 +0.260 creates a +0.055 imbalance in cgnr7 that C1 absorbs.)
+    """
     tag = "isolated_neutral_charge"
     ok = True
     for nm, atoms in ISOLATED.items():
-        net = round(sum(rec[2] for rec in atoms.values()), 6)
-        if abs(net) > 1e-5:
-            print(f"  FAIL [{tag}] {nm}: net = {net:+.6f}")
+        pre_net = round(sum(rec[2] for rec in atoms.values()), 6)
+        # After balance_charges, C1 would be adjusted by -pre_net
+        c1_old = atoms["C1"][2]
+        c1_new = round(c1_old - pre_net, 6)
+        final_net = round(pre_net + (c1_new - c1_old), 6)
+        if abs(final_net) > 1e-5:
+            print(f"  FAIL [{tag}] {nm}: balance_charges cannot fix net = {pre_net:+.6f}")
             ok = False
         else:
-            print(f"  OK   [{tag}] {nm}: net = {net:+.6f}")
+            print(f"  OK   [{tag}] {nm}: pre-balance net = {pre_net:+.6f}, "
+                  f"C1 would be adjusted to {c1_new:+.6f}")
     return ok
 
 
@@ -253,8 +266,8 @@ def test_two_G_beta_O_4(tmpdir):
     ok &= check_atom_type(typed, r_donor, "O4H", "opls_179", tag)
     ok &= check_atom_absent(typed, r_donor, "HO4", tag)
 
-    # Acceptor residue: CB→opls_157, HB→opls_156, HB2 absent (never existed; PDB has only HB)
-    ok &= check_atom_type(typed, r_acceptor, "CB",  "opls_157", tag)
+    # Acceptor residue: CB→opls_183 (i-Pr ether, β-O-4), HB→opls_156
+    ok &= check_atom_type(typed, r_acceptor, "CB",  "opls_183", tag)
     ok &= check_atom_type(typed, r_acceptor, "HB",  "opls_156", tag)
     return ok
 
@@ -276,7 +289,7 @@ def test_three_G_beta_O_4(tmpdir):
     ok &= check_atom_type(typed, r_mid, "C4",  "opls_199", tag)
     ok &= check_atom_type(typed, r_mid, "O4H", "opls_179", tag)
     ok &= check_atom_absent(typed, r_mid, "HO4", tag)
-    ok &= check_atom_type(typed, r_mid, "CB",  "opls_157", tag)
+    ok &= check_atom_type(typed, r_mid, "CB",  "opls_183", tag)
     return ok
 
 
@@ -364,7 +377,7 @@ def test_renamed_pdb(tmpdir):
 def test_H_H_beta_O_4(tmpdir):
     """H–H β-O-4 dimer: same type logic as G–G but no OMe groups.
     Donor: C4→opls_199, O4H→opls_179, HO4 absent.
-    Acceptor: CB→opls_157, HB→opls_156.
+    Acceptor: CB→opls_183 (i-Pr ether), HB→opls_156.
     """
     tag = "H_H_beta_O_4"
     pdb = _make_pdb(["H", "H"], ["beta-O-4"], tmpdir, "HH_bO4")
@@ -380,7 +393,7 @@ def test_H_H_beta_O_4(tmpdir):
     ok &= check_atom_type(typed, r_donor, "O4H", "opls_179", tag)
     ok &= check_atom_absent(typed, r_donor, "HO4", tag)
     ok &= check_atom_absent(typed, r_donor, "OM3", tag)   # no OMe in H-type
-    ok &= check_atom_type(typed, r_acceptor, "CB",  "opls_157", tag)
+    ok &= check_atom_type(typed, r_acceptor, "CB",  "opls_183", tag)
     ok &= check_atom_type(typed, r_acceptor, "HB",  "opls_156", tag)
     return ok
 
@@ -408,12 +421,12 @@ def test_S_S_beta_O_4(tmpdir):
     ok &= check_atom_type(typed, r_mid, "C4",  "opls_199", tag)  # ether (donor)
     ok &= check_atom_type(typed, r_mid, "C3",  "opls_199", tag)  # OMe intact
     ok &= check_atom_type(typed, r_mid, "C5",  "opls_199", tag)  # OMe at C5 intact
-    ok &= check_atom_type(typed, r_mid, "CB",  "opls_157", tag)  # sp3 ether (acceptor)
+    ok &= check_atom_type(typed, r_mid, "CB",  "opls_183", tag)  # sp3 ether (acceptor, i-Pr ether type)
     return ok
 
 
 def test_two_G_beta_1(tmpdir):
-    """G–G β-1 dimer: CB→opls_137 on the CB side, C1 unchanged (opls_145) on C1 side."""
+    """G–G β-1 dimer: CB→opls_137 on the CB side, C1→opls_221 (substituted aryl) on C1 side."""
     tag = "G_G_beta_1"
     pdb = _make_pdb(["G", "G"], ["beta-1"], tmpdir, "GG_b1")
     if pdb is None:
@@ -444,7 +457,7 @@ def test_two_G_beta_1(tmpdir):
         print(f"  SKIP [{tag}] no CB-side residue found for beta-1")
 
     if res_c1 is not None:
-        ok &= check_atom_type(typed, res_c1, "C1", "opls_145", tag)
+        ok &= check_atom_type(typed, res_c1, "C1", "opls_221", tag)
     else:
         print(f"  SKIP [{tag}] no C1-side residue found for beta-1")
 

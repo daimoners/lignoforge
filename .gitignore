@@ -55,3 +55,11 @@ tmp_*/
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+ff_comparison/
+lignoforge_test/
+not_using/
+__pycache__/
+*.pyc
+docs/build/
+MEMO

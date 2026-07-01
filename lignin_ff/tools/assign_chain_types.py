@@ -20,8 +20,10 @@ Design principles
 * **Maximally stable types** – atom types are changed only at atoms
   directly involved in a linkage.
 * **Per-residue net charge = 0.000 e** – any imbalance introduced by
-  removed/added atoms at linkage sites is absorbed on C1 (ipso), which
-  has no formal OPLS-AA charge constraint.
+  removed/added atoms at linkage sites is absorbed on C1 (ipso) via
+  balance_charges().  C1 uses opls_221 (substituted aryl C, same LJ as
+  opls_145 but the semantically correct OPLS type for a trisubstituted
+  aromatic C bearing an alkyl chain).
 * Supports all 7 lignin linkage types:
   beta-O-4, 5-5, 4-O-5, beta-5, beta-beta, alpha-O-4, beta-1.
 * Identical residue environments (same monomer type + same linkage
@@ -53,7 +55,7 @@ BASE_TO_NM   = {"H": "HNM", "G": "GNM", "S": "SNM"}
 _T = Dict[str, Tuple[str, str, float]]
 
 ATYPE: _T = {
-    "CA_ipso":    ("opls_145", "CA",  0.000),
+    "CA_ipso":    ("opls_221", "CA",  0.000),   # substituted aryl C (no H); q adjusted by balance_charges
     "CA_plain":   ("opls_145", "CA", -0.115),
     "HA_arom":    ("opls_146", "HA",  0.115),
     "CA_phenol":  ("opls_166", "CA",  0.150),
@@ -63,7 +65,9 @@ ATYPE: _T = {
     "OS_ether":   ("opls_179", "OS", -0.285),
     "CT_methoxy": ("opls_181", "CT",  0.110),
     "HC_methoxy": ("opls_185", "HC",  0.030),
-    "CT_alc":     ("opls_157", "CT",  0.145),   # raw; adjusted in neutral monomer defs
+    "CT_alc":     ("opls_157", "CT",  0.145),   # Cγ CH2-OH (primary alcohol)
+    "CT_Ca_alc":  ("opls_219", "CT",  0.260),   # Cα sp3 secondary alcohol (benzyl-alcohol type)
+    "CT_Cb_eth":  ("opls_183", "CT",  0.170),   # Cβ/Cα sp3 ether C (i-Pr ether type)
     "HC_alc":     ("opls_156", "HC",  0.040),
     "OH_alc":     ("opls_154", "OH", -0.683),
     "HO_alc":     ("opls_155", "HO",  0.418),
@@ -123,33 +127,27 @@ def _ring_atoms(base: str) -> dict:
 
 
 def _sidechain_atoms() -> dict:
-    """sp3 side-chain atoms for isolated neutral monomer (Cα-OH, Cβ-CH2, Cγ-OH)."""
-    # CA charge adjusted to +0.205 so that cgnr7 = CA+HA+OA+HOA sums to 0.
-    opls7, gt7, _ = at("CT_alc")
-    _, _, hac  = at("HC_alc")
-    _, _, oac  = at("OH_alc")
-    _, _, hoac = at("HO_alc")
-    # CA adjusted: +0.205 so 0.205+0.060-0.683+0.418 = 0.000
+    """sp3 side-chain atoms for isolated neutral monomer (Cα-OH, Cβ-CH2, Cγ-OH).
+
+    CA uses opls_219 (benzyl-alcohol sp3 C, standard charge +0.260).
+    The residue-level imbalance (+0.055 from cgnr7) is absorbed on C1 by
+    balance_charges(), which sets C1 = -0.055 for neutral reference monomers.
+    """
+    _op, _gt, _ = at("HC_alc")
     a = {
-        "CA":  (opls7,        gt7,   0.205,  7, "Cα sp3 secondary alcohol (adjusted)"),
-        "HA":  (*at("HC_alc"),       7, "H on Cα"),
+        "CA":  (*at("CT_Ca_alc"),    7, "Cα sp3 secondary alcohol (opls_219)"),
+        "HA":  (_op, _gt, 0.060,     7, "H on Cα"),
         "OA":  (*at("OH_alc"),       7, "α-OH O"),
         "HOA": (*at("HO_alc"),       7, "α-OH H"),
-        "CB":  (*at("CT_CH2"),       8, "Cβ sp3 CH2"),
+        "CB":  (*at("CT_CH2"),       8, "Cβ sp3 CH2 (no ether in isolated monomer)"),
         "HB1": (*at("HC_alkyl"),     8, "H on Cβ"),
         "HB2": (*at("HC_alkyl"),     8, "H on Cβ"),
         "CG":  (*at("CT_alc"),       9, "Cγ CH2-OH"),
-        "HG1": (*at("HC_alc"),       9, "H on Cγ"),
-        "HG2": (*at("HC_alc"),       9, "H on Cγ"),
+        "HG1": (_op, _gt, 0.060,     9, "H on Cγ"),
+        "HG2": (_op, _gt, 0.060,     9, "H on Cγ"),
         "OG":  (*at("OH_alc"),       9, "γ-OH O"),
         "HOG": (*at("HO_alc"),       9, "γ-OH H"),
     }
-    # Fix cgnr7 for HA: use +0.060 (1propanol value, already in HC_alc raw = 0.040,
-    # but the RTP convention for lignin uses 0.060 throughout)
-    _op, _gt, _ = at("HC_alc")
-    a["HA"]  = (_op, _gt, 0.060, 7, "H on Cα")
-    a["HG1"] = (_op, _gt, 0.060, 9, "H on Cγ")
-    a["HG2"] = (_op, _gt, 0.060, 9, "H on Cγ")
     return a
 
 
@@ -240,7 +238,7 @@ LINKAGE_MODS: Dict[str, Dict[str, dict]] = {
         },
         "CB": {    # this residue is the ether-C ACCEPTOR (Cβ side)
             "type_changes": {
-                "CB":  ("opls_157", "CT",  +0.140),  # CH2 → ether CH (sp3 C-O)
+                "CB":  ("opls_183", "CT",  +0.170),  # CH2 → ether CH (i-Pr ether type)
                 "HB1": ("opls_156", "HC",  +0.060),  # H on ether CH
             },
             "remove":  ["HB2"],   # CB: CH2 → CH (one H removed)
@@ -317,7 +315,7 @@ LINKAGE_MODS: Dict[str, Dict[str, dict]] = {
         },
         "CA_ringclose": {   # CA becomes ether C; OA (α-OH) removed, bond → O4H
             "type_changes": {
-                "CA":  ("opls_157", "CT",  +0.140),  # Cα sp3 ether C (like CB in beta-O-4)
+                "CA":  ("opls_183", "CT",  +0.170),  # Cα sp3 ether C (i-Pr ether type)
                 "HA":  ("opls_156", "HC",  +0.060),
             },
             "remove":  ["OA", "HOA"],   # α-OH is replaced by the ether bond
@@ -344,7 +342,7 @@ LINKAGE_MODS: Dict[str, Dict[str, dict]] = {
         # C-O bonds (the α-OH OA is retained; the new bond is to other-unit OG).
         "CA_ringclose": {
             "type_changes": {
-                "CA":  ("opls_157", "CT",  +0.140),  # sp3 C bearing two oxygens
+                "CA":  ("opls_183", "CT",  +0.170),  # sp3 ether C; OA (α-OH) is retained
                 "HA":  ("opls_156", "HC",  +0.060),
             },
             "remove":  [],
@@ -374,12 +372,12 @@ LINKAGE_MODS: Dict[str, Dict[str, dict]] = {
             "rename":  {},
             "add":     {},
         },
-        "CA": {   # Cα becomes ether C: OA (α-OH) is freed/removed, CA→aryl-ether
+        "CA": {   # Cα becomes ether C: OA (α-OH) removed, CA bonds to O4H of other unit
             "type_changes": {
-                "CA":  ("opls_157", "CT",  +0.140),
+                "CA":  ("opls_183", "CT",  +0.170),  # i-Pr ether type (C-O-Ar)
                 "HA":  ("opls_156", "HC",  +0.060),
             },
-            "remove":  ["OA", "HOA"],   # α-OH lost; CA now bonds to O4H of other unit
+            "remove":  ["OA", "HOA"],
             "rename":  {},
             "add":     {},
         },
@@ -673,7 +671,7 @@ def _type_residue_atoms(
 
     # ── Aromatic ring ─────────────────────────────────────────────────────────
     if "C1" in pdb:
-        typed["C1"] = ("opls_145", "CA",  0.000, 1, "Cipso (adjusted)")
+        typed["C1"] = ("opls_221", "CA",  0.000, 1, "Cipso (adjusted by balance_charges)")
 
     if "C2" in pdb:
         typed["C2"] = ("opls_145", "CA", -0.115, 2, "aromatic CH")
@@ -744,13 +742,13 @@ def _type_residue_atoms(
     if "CA" in pdb:
         lkCA, posCA = ic.get("CA", (None, None))
         if posCA in ("CA", "CA_ringclose"):
-            # CA forms the inter-residue ether bond
-            typed["CA"] = ("opls_157", "CT",  0.140, 7, "Cα sp3 ether C")
+            # CA forms the inter-residue ether bond (α-O-4, β-5 ring-closure)
+            typed["CA"] = ("opls_183", "CT",  0.170, 7, "Cα sp3 ether C (i-Pr ether type)")
             if "HA" in pdb:
                 typed["HA"] = ("opls_156", "HC",  0.060, 7, "H on Cα ether")
         elif "OA" in pdb:
-            # sp3 secondary alcohol (β-O-4 acceptor side)
-            typed["CA"]  = ("opls_157", "CT",  0.205, 7, "Cα sp3 alc (adjusted)")
+            # sp3 secondary alcohol (β-O-4 acceptor side, Cα−OH)
+            typed["CA"]  = ("opls_219", "CT",  0.260, 7, "Cα sp3 alc (benzyl-alcohol type)")
             if "HA" in pdb:
                 typed["HA"]  = ("opls_156", "HC",  0.060, 7, "H on Cα")
             typed["OA"]  = ("opls_154", "OH", -0.683, 7, "α-OH O")
@@ -775,7 +773,7 @@ def _type_residue_atoms(
     if "CB" in pdb:
         lkCB, posCB = ic.get("CB", (None, None))
         if "OA" in pdb:
-            typed["CB"] = ("opls_157", "CT",  0.140, 8, "Cβ sp3 ether (β-O-4)")
+            typed["CB"] = ("opls_183", "CT",  0.170, 8, "Cβ sp3 ether (β-O-4, i-Pr ether type)")
             if "HB" in pdb:
                 typed["HB"] = ("opls_156", "HC",  0.060, 8, "H on Cβ ether")
         elif lkCB in ("beta-5", "beta-beta", "beta-1"):

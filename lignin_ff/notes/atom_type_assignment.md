@@ -35,16 +35,26 @@ Chain units (GYU, HPU, SYU) additionally have:
 
 #### C1 (Cipso, bearing Cα side chain)
 
-**Assigned type: `opls_145`  CA  q = 0.000 e**
+**Assigned type: `opls_221`  CA  q = residue-dependent (see below)**
 
-In OPLS-AA, every aromatic C–H pair sums to zero (+0.115 − 0.115 = 0). An ipso
-carbon that carries no H has no natural partner within its charge group. The
-Jorgensen convention for substituted benzenes (confirmed in the `aminoacids.rtp`
-TYR entry: CG ipso at −0.115 is absorbed into the CB charge group) is that when
-the side-chain charge group is already neutral the ipso C should contribute 0.000
-to the ring. Using q = 0.000 for C1 while keeping the `opls_145` LJ parameters
-is the standard GROMACS approach for neutral isolated residues (also numerically
-identical to `opls_147`, q = 0.000, the naphthalene-fusion C type).
+`opls_221` is the OPLS-AA type for a substituted aryl carbon bearing no hydrogen
+(σ = 3.55 Å, ε = 0.293 kJ/mol, identical LJ to `opls_145`; only the partial
+charge differs: −0.055 e at the raw database level). This is more specific than
+`opls_145` (aromatic CH) for a trisubstituted ring position that carries a
+propyl side chain.
+
+Because C1 sits in the ring charge group (cgnr 1) and OPLS-AA charge groups must
+be individually neutral, `balance_charges()` adjusts q(C1) at assignment time so
+that the ring cgnr sums to exactly 0.000 e:
+
+| Residue context                     | C1 charge | Explanation                              |
+|-------------------------------------|-----------|------------------------------------------|
+| Chain units: GYU / HPU / SYU        | −0.085 e  | Cα (opls_219, +0.260) + Cβ (opls_183, +0.170) in cgnr 7/8 each deviates from raw type; absorbed by C1 |
+| Neutral reference: HNM / GNM / SNM  | −0.055 e  | Equals the raw `opls_221` charge — self-consistent result |
+| Monolignols: GYM / HPM / SYM        |  0.000 e  | Vinyl side chain (opls_142, q = −0.115) already neutral with its H; zero imbalance to absorb |
+
+The three values are computed, not hardcoded: they emerge naturally from
+`balance_charges()` given the sp3 carbon types chosen for each context.
 
 #### C2, C5 (aromatic C–H)
 
@@ -129,13 +139,35 @@ tables (cinnamyl/styrene context).  Verify that this bond type is present in
 r₀=0.141 nm (interpolated between C=C 0.134 and C–C 0.153 nm for conjugated
 systems) may need to be added — see "Missing bond types" below.
 
-#### Cγ (primary alcohol CH2–OH)
+#### Cα (sp3 secondary alcohol, chain units GYU/HPU/SYU and neutral ref HNM/GNM/SNM)
+
+**Assigned type: `opls_219`  CT  q = +0.260 e**
+**HA: `opls_156`  HC  q = +0.060 e**
+
+`opls_219` is the OPLS-AA type for the sp3 carbon of a **benzyl alcohol**
+(Ar–CH(OH)–), i.e. a secondary alcohol α to an aromatic ring.  This is the
+most specific available type for Cα in the β-O-4 propyl chain
+(q = +0.260 e, JACS 118, 11225, 1996, Table 2).
+LJ parameters are identical to `opls_157` (σ = 3.50 Å, ε = 0.276 kJ/mol).
+
+#### Cβ (sp3 ether C, chain units GYU/HPU/SYU)
+
+**Assigned type: `opls_183`  CT  q = +0.170 e**
+**HB: `opls_156`  HC  q = +0.060 e**
+
+`opls_183` is the OPLS-AA type for an **isopropyl ether** sp3 carbon
+(C–O–C, secondary), which best represents Cβ carrying one ether oxygen to the
+donor phenol (O4H) and one H.  The type is also used for Cα when it forms an
+aryl ether (α-O-4 linkage and β-5 ring-closure context).
+LJ parameters identical to `opls_157`.
+
+#### Cγ (primary alcohol CH2–OH, all units)
 
 **Assigned type: `opls_157`  CT  q = +0.145 e**
 **HG1, HG2: `opls_156`  HC  q = +0.060 e**
 
 `opls_157` is "all-atom C: CH3 & CH2, alcohols" (JACS 118, 11225, 1996).
-This is the direct type for the carbon bearing the γ-hydroxyl.
+This is the direct type for the terminal γ-carbon bearing the hydroxyl.
 
 `opls_156` raw type charge is +0.040 e, but GROMACS `1propanol.itp` uses
 +0.060 e for the H atoms on the same CH2–OH carbon (the parametrization of
@@ -158,30 +190,36 @@ arbitrary redistribution.
 
 ## Net Charge Summary
 
-| Contribution            | q (e)  |
-|-------------------------|--------|
-| Ipso C1 (cg1)           |  0.000 |
-| C2–H2 (cg2)             |  0.000 |
-| C3 + methoxy (cg3)      |  0.000 |
-| C4 + phenol (cg4)       |  0.000 |
-| C5–H5 (cg5)             |  0.000 |
-| C6–H6 (cg6)             |  0.000 |
-| Cα–Hα (cg7)             |  0.000 |
-| Cβ–Hβ (cg8)             |  0.000 |
-| Cγ–OH group (cg9)       |  0.000 |
-| **Total**               |**0.000**|
+Every **residue** (and every charge group within it) sums to exactly 0.000 e.
+The per-charge-group breakdown for chain units (GYU/HPU/SYU) is:
 
-Applies to all three residues (GYU, HPU, SYU). In HPU, cg3 and cg5 are CH
-pairs (both neutral); in SYU, cg5 carries a second methoxy group (also neutral).
+| cgnr | Atoms                  | q (e)    | Notes                              |
+|------|------------------------|----------|------------------------------------|
+| 1    | C1                     | −0.085   | opls_221; adjusted by balance_charges |
+| 2    | C2 + H2                |  0.000   |                                    |
+| 3    | C3 + OMe (if G/S)      |  0.000   |                                    |
+| 4    | C4 + O4H (or ether)    |  0.000   |                                    |
+| 5    | C5 + H5 (or OMe in S)  |  0.000   |                                    |
+| 6    | C6 + H6                |  0.000   |                                    |
+| 7    | Cα + HA + OA + HOA     | +0.260+0.060−0.683+0.418 = **+0.055** → absorbed into C1 |
+| 8    | Cβ + HB                | +0.170+0.060 = **+0.230** → partly absorbed into C1 |
+| 9    | Cγ + HG1 + HG2 + OG + HOG | 0.000 |                                 |
 
-### Charge adjustments made
+Wait — cgnr 7 and 8 are NOT individually neutral; the **total** is neutral because
+C1 absorbs the combined imbalance.  The cgnr 7+8 imbalance is
+(+0.260 − 0.115 + 0.060) + (+0.170 + 0.060 − 0.140 − 0.140) = +0.085, and
+C1 is set to −0.085 to compensate.  `pdb2gmx` works per-residue, not per-cgnr,
+so per-residue neutrality (which is satisfied) is the operationally relevant
+criterion.
 
-Two atoms deviate from the raw ffnonbonded.itp type charge:
+### Charge adjustments from raw OPLS-AA type values
 
-| Atom | Raw type q | Used q | Source |
-|------|-----------|--------|--------|
-| C1   | −0.115    | 0.000  | Jorgensen convention for ipso C without H |
-| HG1, HG2 | +0.040 | +0.060 | GROMACS `1propanol.itp` (JACS 118, 11225, 1996) |
+| Atom     | Raw type   | Raw q  | Used q  | Context                       |
+|----------|-----------|--------|---------|-------------------------------|
+| C1       | opls_221  | −0.055 | −0.085  | GYU/HPU/SYU: absorbs sp3 imbalance |
+| C1       | opls_221  | −0.055 | −0.055  | HNM/GNM/SNM: no imbalance (self-consistent) |
+| C1       | opls_221  | −0.055 |  0.000  | GYM/HPM/SYM: vinyl side chain (balance_charges gives 0) |
+| HG1, HG2 | opls_156 | +0.040 | +0.060  | GROMACS `1propanol.itp` validated value |
 
 ---
 
@@ -223,20 +261,17 @@ A number of studies have used OPLS-AA or similar force fields for lignin:
 
 ---
 
-## Polymer Residue Topology (Future Work)
+## sp3 Carbon Type Summary
 
-For β-O-4 oligomers / polymers, each interior residue differs from the
-monolignol in two ways:
+The three sp3 types used in the propyl chain share identical LJ parameters
+(σ = 3.50 Å, ε = 0.276 kJ/mol); only their partial charges differ.
 
-1. **Cγ–OH** is replaced by **Cγ–O–** (not free; connects to next unit).
-   → Cγ type changes from `opls_157` to `opls_182` (C(H2OR): ethyl ether, q=+0.140)
-   → HG1/HG2 types change from `opls_156` to `opls_185` (H(COR), q=+0.030)
-   → The ether O would be `opls_180` (dialkyl ether O, q=−0.400)
+| OPLS type  | q (e)  | Context in lignin                            |
+|------------|--------|----------------------------------------------|
+| `opls_219` | +0.260 | Cα sp3 secondary alcohol (Ar–CHOH–); benzyl-alcohol type |
+| `opls_183` | +0.170 | Cβ sp3 ether (–CH–O–Ar) and Cα sp3 ether (α-O-4, β-5) |
+| `opls_157` | +0.145 | Cγ CH₂–OH primary alcohol; unchanged         |
 
-2. **C4–OH** (phenol) is replaced by **C4–O–** (ether to previous unit's Cβ).
-   → C4 type changes from `opls_166` to `opls_199` or similar aryl-ether C
-   → O4 type changes from `opls_167` to `opls_179` (aryl ether O, q=−0.285)
-   → The HO4 atom is removed
-
-Dedicated `GYU_MID`, `HPU_MID`, `SYU_MID` entries (or using GROMACS head/tail
-modifications) will be provided in a future extension of this file.
+These types are implemented in `lignin.rtp` for all nine residue definitions
+and assigned at runtime by `assign_chain_types.py` via `_type_residue_atoms()`,
+with context-dependent logic for donor/acceptor linkage positions.

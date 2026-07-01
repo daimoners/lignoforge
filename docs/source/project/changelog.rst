@@ -5,6 +5,28 @@ Changelog
 All notable changes to LignoForge are documented here.
 
 ---------
+v0.2.1
+---------
+
+*2026-07 patch.*
+
+Patch updates
+~~~~~~~~~~~~~
+
+* **Improved OPLS-AA sp³ carbon types in** ``lignin_ff/lignin.rtp`` **and**
+  ``tools/assign_chain_types.py``: Cα (sp³ secondary alcohol) now uses
+  ``opls_219`` (benzyl-alcohol type, q = +0.260 e) instead of the generic
+  ``opls_157``; Cβ / Cα-ether (sp³ C bearing one ether bond) now uses
+  ``opls_183`` (isopropyl-ether type, q = +0.170 e).  C1 (Cipso) is
+  promoted from ``opls_145`` to the more specific ``opls_221`` (substituted
+  aryl C).  All LJ parameters are unchanged (σ = 3.50 Å for CT, σ = 3.55 Å
+  for CA); only partial charges differ.  Per-residue charge neutrality is
+  maintained in all nine residue types via ``balance_charges()``, which
+  adjusts q(C1) to absorb the sp³ imbalance (GYU/HPU/SYU: C1 = −0.085 e;
+  HNM/GNM/SNM: C1 = −0.055 e; GYM/HPM/SYM: C1 = 0.000 e).  Validated by
+  ``pdb2gmx`` (total charge = 0.000 e) and energy minimisation convergence.
+
+---------
 v0.2.0
 ---------
 

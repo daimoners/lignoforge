@@ -44,7 +44,8 @@
 ;               TYR parametrization in aminoacids.rtp.
 ;
 ; Key types used:
-;   opls_145  CA   q=-0.115  aromatic C-H (benzene) or C-C ipso (q set to 0)
+;   opls_221  CA   q=-0.055  C1 ipso (substituted aryl C bearing alkyl chain; charge adjusted)
+;   opls_145  CA   q=-0.115  aromatic C-H (benzene)
 ;   opls_146  HA   q=+0.115  aromatic H
 ;   opls_166  CA   q=+0.150  aromatic C bearing free phenol -OH
 ;   opls_167  OH   q=-0.585  phenol O
@@ -55,22 +56,28 @@
 ;   opls_185  HC   q=+0.030  H on methoxy CH3
 ;   opls_142  CM   q=-0.115  vinyl =CH- (sp2, one substituent)
 ;   opls_144  HC   q=+0.115  vinyl H
-;   opls_157  CT   q=+0.145  sp3 C of alcohol or α-ether (CH-OH / CH-O-)
+;   opls_219  CT   q=+0.260  Cα sp3 secondary alcohol (benzyl-alcohol type, Ar-CHOH)
+;   opls_183  CT   q=+0.170  Cβ sp3 ether C (i-Pr ether type, CH-O-Ar)
+;   opls_157  CT   q=+0.145  Cγ sp3 CH2-OH (primary alcohol)
 ;   opls_156  HC   q=+0.040  H on sp3 C adjacent to O (corrected to +0.060, see below)
 ;   opls_154  OH   q=-0.683  aliphatic alcohol O
 ;   opls_155  HO   q=+0.418  aliphatic alcohol H
 ;
-; CHARGE CORRECTIONS (two intentional deviations from raw OPLS-AA values):
+; CHARGE CORRECTIONS (one intentional deviation from raw OPLS-AA values):
 ;
-;   (a) C1 ipso  q = 0.000  (type opls_145, LJ parameters unchanged)
-;       A trisubstituted aromatic C has no H partner; the Jorgensen convention
-;       assigns q=0.000 so that the ring charge group closes to zero.
-;       Numerically identical to opls_147 (naphthalene C9, q=0.000).
-;
-;   (b) HG1/HG2 on Cγ  q = +0.060  (type opls_156, raw q=+0.040)
+;   HG1/HG2 on Cγ  q = +0.060  (type opls_156, raw q=+0.040)
 ;       Value taken from GROMACS 1propanol.itp (Jorgensen JACS 118:11225, 1996).
 ;       Makes the Cγ-OH group sum to zero:
 ;         +0.145 + 2×(+0.060) − 0.683 + 0.418 = 0.000 e.
+;
+; CIPSO CHARGE:
+;   C1 uses opls_221 (same LJ as opls_145; q_standard = −0.055).
+;   In isolated monolignols (vinyl) the ring+side-chain already sums to 0,
+;   so C1 q = 0.000.  In neutral saturated monomers (HNM/GNM/SNM), the sp3
+;   Cα (opls_219, +0.260) creates a +0.055 imbalance in cgnr7, so C1 = −0.055
+;   (equals the OPLS-AA standard charge exactly).  In chain units (GYU/HPU/SYU)
+;   the higher charges on both Cα (+0.260) and Cβ (+0.170) create +0.085
+;   imbalance, so C1 = −0.085.
 ;
 ; NET CHARGE: 0.000 e for all residues (verified per charge group).
 ;
@@ -86,10 +93,11 @@
 ;   Vinyl (monolignols GYM/HPM/SYM):  C1−CA=CB−CG−OH
 ;     CA (opls_142, sp2), CB (opls_142, sp2), CG (opls_157, sp3-CH2OH)
 ;   sp3 (chain units GYU/HPU/SYU):    C1−CA(OA)−CB(O4H)−CG−OH
-;     CA (opls_157, α-OH), CB (opls_157, α-ether to O4H of prev residue)
+;     CA (opls_219, α-OH, benzyl-alcohol type), CB (opls_183, α-ether, i-Pr ether type)
 ;     CG (opls_157, sp3-CH2OH)
 ;   sp3 (neutral refs HNM/GNM/SNM):   C1−CA−CB−CG−OH
-;     CA (opls_157), CB (opls_157), CG (opls_157, sp3-CH2OH); no inter-res. bonds
+;     CA (opls_219, secondary alcohol), CB (opls_136, plain CH2), CG (opls_157, sp3-CH2OH)
+;     no inter-residue bonds; CB has no heteroatom neighbour in isolated monomer
 ;
 ; Usage:
 ;   1. Copy this file into your force-field directory:
@@ -125,24 +133,24 @@
 ;          HA,HB → sp3 type (opls_156, +0.060) instead of vinyl (opls_144, +0.115)
 ;
 ; CHARGE GROUPS (cgnr 1–11, total residue = 0.000 e):
-;   cgnr 1   C1        =  0.000
+;   cgnr 1   C1        = −0.085  (opls_221, adjusted for residue neutrality)
 ;   cgnr 2   C2+H2     =  0.000
 ;   cgnr 3   C3+OM3+CM3+3×HM3x  =  0.000
-;   cgnr 4   C4+O4H    = −0.200  (open inter-residue boundary; balanced by cgnr 8)
+;   cgnr 4   C4+O4H    = −0.200  (open inter-residue boundary)
 ;   cgnr 5   C5+H5     =  0.000
 ;   cgnr 6   C6+H6     =  0.000
-;   cgnr 7   CA+HA     = +0.265  (secondary alcohol C: +0.145+0.060 adjusted)
-;   cgnr 8   CB+HB     = +0.200  (ether α-C: balances cgnr 4)
+;   cgnr 7   CA+HA     = +0.320  (opls_219: +0.260+0.060)
+;   cgnr 8   CB+HB     = +0.230  (opls_183: +0.170+0.060)
 ;   cgnr 9   CG+HG1+HG2 = +0.265
-;   cgnr 10  OA+HOA    = −0.265  (α-OH: balances cgnr 7)
-;   cgnr 11  OG+HOG    = −0.265  (γ-OH: balances cgnr 9)
-;   sum = 0+0+0−0.200+0+0+0.265+0.200+0.265−0.265−0.265 = 0.000 e  ✓
+;   cgnr 10  OA+HOA    = −0.265  (α-OH)
+;   cgnr 11  OG+HOG    = −0.265  (γ-OH)
+;   sum = −0.085+0+0−0.200+0+0+0.320+0.230+0.265−0.265−0.265 = 0.000 e  ✓
 ; ==========================================================================
 [ GYU ]
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring ---
-   C1     opls_145     0.000     1   ; Cipso, q=0 (no H partner; see header)
+   C1     opls_221    -0.085     1   ; Cipso (opls_221, substituted aryl C; adjusted for neutrality)
    C2     opls_145    -0.115     2   ; aromatic CH (ortho to C1)
    H2     opls_146     0.115     2   ; aromatic H on C2
    C3     opls_199     0.085     3   ; aromatic C at C3, bearing -OCH3 (anisole type)
@@ -151,19 +159,19 @@
    HM31   opls_185     0.030     3   ; methoxy H (1/3)
    HM32   opls_185     0.030     3   ; methoxy H (2/3)
    HM33   opls_185     0.030     3   ; methoxy H (3/3)
-   C4     opls_199     0.085     4   ; C4 aryl ether C (β-O-4 linkage); was phenol C in GYM
+   C4     opls_199     0.085     4   ; C4 aryl ether C (β-O-4 linkage)
    O4H    opls_179    -0.285     4   ; O4H aryl ether O; open bond → -CB (prev unit)
    C5     opls_145    -0.115     5   ; aromatic CH at C5
    H5     opls_146     0.115     5   ; aromatic H on C5
    C6     opls_145    -0.115     6   ; aromatic CH at C6 (ortho to C1)
    H6     opls_146     0.115     6   ; aromatic H on C6
 ;  --- sp3 β-O-4 side chain ---
-   CA     opls_157     0.205     7   ; Cα sp3 secondary alcohol C (Ar−CHOH−)
-   HA     opls_156     0.060     7   ; H on Cα (secondary alcohol C)
-   CB     opls_157     0.140     8   ; Cβ sp3 ether α-C; open bond → +O4H (next unit)
-   HB     opls_156     0.060     8   ; H on Cβ (ether α-C)
-   CG     opls_157     0.145     9   ; Cγ CH2-OH (primary alcohol; same type as GYM)
-   HG1    opls_156     0.060     9   ; H on Cγ (from 1propanol.itp: +0.060)
+   CA     opls_219     0.260     7   ; Cα sp3 secondary alcohol C (opls_219, benzyl-alcohol type)
+   HA     opls_156     0.060     7   ; H on Cα
+   CB     opls_183     0.170     8   ; Cβ sp3 ether C (opls_183, i-Pr ether type); open bond → +O4H
+   HB     opls_156     0.060     8   ; H on Cβ
+   CG     opls_157     0.145     9   ; Cγ CH2-OH (primary alcohol)
+   HG1    opls_156     0.060     9   ; H on Cγ
    HG2    opls_156     0.060     9   ; H on Cγ
    OA     opls_154    -0.683    10   ; α-OH oxygen
    HOA    opls_155     0.418    10   ; α-OH hydrogen
@@ -232,41 +240,41 @@
 ;          HA,HB → sp3 type (opls_156, +0.060); vinyl type in HPM (opls_144)
 ;
 ; CHARGE GROUPS (cgnr 1–11, total residue = 0.000 e):
-;   cgnr 1   C1                   =  0.000
+;   cgnr 1   C1                   = −0.085  (opls_221, adjusted for residue neutrality)
 ;   cgnr 2   C2+H2                =  0.000
 ;   cgnr 3   C3+H3                =  0.000  (plain CH, no OMe in H-type)
-;   cgnr 4   C4+O4H               = −0.200  (open inter-residue; balanced by cgnr 8)
+;   cgnr 4   C4+O4H               = −0.200  (open inter-residue boundary)
 ;   cgnr 5   C5+H5                =  0.000
 ;   cgnr 6   C6+H6                =  0.000
-;   cgnr 7   CA+HA                = +0.265
-;   cgnr 8   CB+HB                = +0.200  (ether α-C: balances cgnr 4)
+;   cgnr 7   CA+HA                = +0.320  (opls_219: +0.260+0.060)
+;   cgnr 8   CB+HB                = +0.230  (opls_183: +0.170+0.060)
 ;   cgnr 9   CG+HG1+HG2           = +0.265
-;   cgnr 10  OA+HOA               = −0.265  (α-OH: balances cgnr 7)
-;   cgnr 11  OG+HOG               = −0.265  (γ-OH: balances cgnr 9)
-;   sum = 0+0+0−0.200+0+0+0.265+0.200+0.265−0.265−0.265 = 0.000 e  ✓
+;   cgnr 10  OA+HOA               = −0.265  (α-OH)
+;   cgnr 11  OG+HOG               = −0.265  (γ-OH)
+;   sum = −0.085+0+0−0.200+0+0+0.320+0.230+0.265−0.265−0.265 = 0.000 e  ✓
 ; ==========================================================================
 [ HPU ]
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring (p-hydroxyphenyl: CH at C2,C3,C5,C6; ether at C4) ---
-   C1     opls_145     0.000     1   ; Cipso, q=0 (no H partner)
+   C1     opls_221    -0.085     1   ; Cipso (opls_221, substituted aryl C; adjusted for neutrality)
    C2     opls_145    -0.115     2   ; aromatic CH (ortho to C1)
    H2     opls_146     0.115     2   ; aromatic H on C2
    C3     opls_145    -0.115     3   ; aromatic CH at C3 (no OMe in H-type)
    H3     opls_146     0.115     3   ; aromatic H on C3
-   C4     opls_199     0.085     4   ; C4 aryl ether C (β-O-4); was phenol C in HPM
+   C4     opls_199     0.085     4   ; C4 aryl ether C (β-O-4)
    O4H    opls_179    -0.285     4   ; O4H aryl ether O; open bond → -CB (prev unit)
    C5     opls_145    -0.115     5   ; aromatic CH at C5
    H5     opls_146     0.115     5   ; aromatic H on C5
    C6     opls_145    -0.115     6   ; aromatic CH at C6 (ortho to C1)
    H6     opls_146     0.115     6   ; aromatic H on C6
 ;  --- sp3 β-O-4 side chain (identical to GYU) ---
-   CA     opls_157     0.205     7   ; Cα sp3 secondary alcohol C (Ar−CHOH−)
+   CA     opls_219     0.260     7   ; Cα sp3 secondary alcohol C (opls_219, benzyl-alcohol type)
    HA     opls_156     0.060     7   ; H on Cα
-   CB     opls_157     0.140     8   ; Cβ sp3 ether α-C; open bond → +O4H (next unit)
-   HB     opls_156     0.060     8   ; H on Cβ (ether α-C)
+   CB     opls_183     0.170     8   ; Cβ sp3 ether C (opls_183, i-Pr ether type); open bond → +O4H
+   HB     opls_156     0.060     8   ; H on Cβ
    CG     opls_157     0.145     9   ; Cγ CH2-OH (primary alcohol)
-   HG1    opls_156     0.060     9   ; H on Cγ (from 1propanol.itp: +0.060)
+   HG1    opls_156     0.060     9   ; H on Cγ
    HG2    opls_156     0.060     9   ; H on Cγ
    OA     opls_154    -0.683    10   ; α-OH oxygen
    HOA    opls_155     0.418    10   ; α-OH hydrogen
@@ -330,24 +338,24 @@
 ;          HA,HB → sp3 type (opls_156, +0.060); vinyl type in SYM (opls_144)
 ;
 ; CHARGE GROUPS (cgnr 1–11, total residue = 0.000 e):
-;   cgnr 1   C1                              =  0.000
+;   cgnr 1   C1                              = −0.085  (opls_221, adjusted for residue neutrality)
 ;   cgnr 2   C2+H2                           =  0.000
 ;   cgnr 3   C3+OM3+CM3+3×HM3x              =  0.000
-;   cgnr 4   C4+O4H                          = −0.200  (balanced by cgnr 8)
+;   cgnr 4   C4+O4H                          = −0.200  (open inter-residue boundary)
 ;   cgnr 5   C5+OM5+CM5+3×HM5x              =  0.000  (OMe at C5)
 ;   cgnr 6   C6+H6                           =  0.000
-;   cgnr 7   CA+HA                           = +0.265
-;   cgnr 8   CB+HB                           = +0.200  (ether α-C: balances cgnr 4)
+;   cgnr 7   CA+HA                           = +0.320  (opls_219: +0.260+0.060)
+;   cgnr 8   CB+HB                           = +0.230  (opls_183: +0.170+0.060)
 ;   cgnr 9   CG+HG1+HG2                      = +0.265
-;   cgnr 10  OA+HOA                          = −0.265  (α-OH: balances cgnr 7)
-;   cgnr 11  OG+HOG                          = −0.265  (γ-OH: balances cgnr 9)
-;   sum = 0+0+0−0.200+0+0+0.265+0.200+0.265−0.265−0.265 = 0.000 e  ✓
+;   cgnr 10  OA+HOA                          = −0.265  (α-OH)
+;   cgnr 11  OG+HOG                          = −0.265  (γ-OH)
+;   sum = −0.085+0+0−0.200+0+0+0.320+0.230+0.265−0.265−0.265 = 0.000 e  ✓
 ; ==========================================================================
 [ SYU ]
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring (syringyl: OMe at C3 AND C5, ether at C4) ---
-   C1     opls_145     0.000     1   ; Cipso, q=0
+   C1     opls_221    -0.085     1   ; Cipso (opls_221, substituted aryl C; adjusted for neutrality)
    C2     opls_145    -0.115     2   ; aromatic CH (between C1 and C3-OMe)
    H2     opls_146     0.115     2   ; aromatic H on C2
    C3     opls_199     0.085     3   ; C3 bearing -OCH3 (anisole type)
@@ -356,7 +364,7 @@
    HM31   opls_185     0.030     3   ; methoxy H (1/3)
    HM32   opls_185     0.030     3   ; methoxy H (2/3)
    HM33   opls_185     0.030     3   ; methoxy H (3/3)
-   C4     opls_199     0.085     4   ; C4 aryl ether C (β-O-4); was phenol C in SYM
+   C4     opls_199     0.085     4   ; C4 aryl ether C (β-O-4)
    O4H    opls_179    -0.285     4   ; O4H aryl ether O; open bond → -CB (prev unit)
    C5     opls_199     0.085     5   ; C5 bearing -OCH3 (anisole type)
    OM5    opls_179    -0.285     5   ; aryl ether O of methoxy at C5
@@ -367,12 +375,12 @@
    C6     opls_145    -0.115     6   ; aromatic CH (between C5-OMe and C1)
    H6     opls_146     0.115     6   ; aromatic H on C6
 ;  --- sp3 β-O-4 side chain (identical to GYU) ---
-   CA     opls_157     0.205     7   ; Cα sp3 secondary alcohol C (Ar−CHOH−)
+   CA     opls_219     0.260     7   ; Cα sp3 secondary alcohol C (opls_219, benzyl-alcohol type)
    HA     opls_156     0.060     7   ; H on Cα
-   CB     opls_157     0.140     8   ; Cβ sp3 ether α-C; open bond → +O4H (next unit)
-   HB     opls_156     0.060     8   ; H on Cβ (ether α-C)
+   CB     opls_183     0.170     8   ; Cβ sp3 ether C (opls_183, i-Pr ether type); open bond → +O4H
+   HB     opls_156     0.060     8   ; H on Cβ
    CG     opls_157     0.145     9   ; Cγ CH2-OH (primary alcohol)
-   HG1    opls_156     0.060     9   ; H on Cγ (from 1propanol.itp: +0.060)
+   HG1    opls_156     0.060     9   ; H on Cγ
    HG2    opls_156     0.060     9   ; H on Cγ
    OA     opls_154    -0.683    10   ; α-OH oxygen
    HOA    opls_155     0.418    10   ; α-OH hydrogen
@@ -442,7 +450,7 @@
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring ---
-   C1     opls_145     0.000     1   ; Cipso, q=0 (no H partner; see header)
+   C1     opls_221     0.000     1   ; Cipso (opls_221; q=0 because vinyl side-chain gives zero imbalance)
    C2     opls_145    -0.115     2   ; aromatic CH (ortho to C1, adjacent to C3-OMe)
    H2     opls_146     0.115     2   ; aromatic H on C2
    C3     opls_199     0.085     3   ; aromatic C at C3, bearing -OCH3 (anisole type)
@@ -527,7 +535,7 @@
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring (para-hydroxyphenyl: H at C2, C3, C5, C6) ---
-   C1     opls_145     0.000     1   ; Cipso, q=0 (no H partner; see header)
+   C1     opls_221     0.000     1   ; Cipso (opls_221; q=0 because vinyl side-chain gives zero imbalance)
    C2     opls_145    -0.115     2   ; aromatic CH (ortho to C1)
    H2     opls_146     0.115     2   ; aromatic H on C2
    C3     opls_145    -0.115     3   ; aromatic CH (meta, adjacent to C4-OH)
@@ -602,7 +610,7 @@
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring (syringyl: OMe at C3 and C5, OH at C4, H at C2 and C6) ---
-   C1     opls_145     0.000     1   ; Cipso, q=0 (no H partner; see header)
+   C1     opls_221     0.000     1   ; Cipso (opls_221; q=0 because vinyl side-chain gives zero imbalance)
    C2     opls_145    -0.115     2   ; aromatic CH (between C1 and C3-OMe)
    H2     opls_146     0.115     2   ; aromatic H on C2
    C3     opls_199     0.085     3   ; aromatic C at C3, bearing -OCH3 (anisole type)
@@ -693,21 +701,22 @@
 ;        Use as reference baseline for the pdb2gmx type-assignment tool.
 ;
 ; CHARGE GROUPS (cgnr 1–9, net residue = 0.000 e):
-;   cgnr 1   C1                         =  0.000
+;   cgnr 1   C1                         = −0.055  (opls_221, adjusted; = standard OPLS charge)
 ;   cgnr 2   C2+H2                      =  0.000
 ;   cgnr 3   C3+H3                      =  0.000
 ;   cgnr 4   C4+O4H+HO4                 =  0.000   (+0.150−0.585+0.435)
 ;   cgnr 5   C5+H5                      =  0.000
 ;   cgnr 6   C6+H6                      =  0.000
-;   cgnr 7   CA+HA+OA+HOA               =  0.000   (+0.205+0.060−0.683+0.418)
+;   cgnr 7   CA+HA+OA+HOA               = +0.055   (opls_219: +0.260+0.060−0.683+0.418)
 ;   cgnr 8   CB+HB1+HB2                 =  0.000   (−0.120+0.060+0.060)
 ;   cgnr 9   CG+HG1+HG2+OG+HOG         =  0.000   (+0.145+0.060+0.060−0.683+0.418)
+;   sum = −0.055+0+0+0+0+0+0.055+0+0 = 0.000 e  ✓
 ; ==========================================================================
 [ HNM ]
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring (all 4 CH positions: C2,C3,C5,C6) ---
-   C1     opls_145     0.000     1   ; Cipso, q=0 (no H; see header)
+   C1     opls_221    -0.055     1   ; Cipso (opls_221; q = standard OPLS-AA charge = −0.055)
    C2     opls_145    -0.115     2   ; aromatic CH ortho to C1
    H2     opls_146     0.115     2
    C3     opls_145    -0.115     3   ; aromatic CH meta (no OMe in H-type)
@@ -720,14 +729,14 @@
    C6     opls_145    -0.115     6   ; aromatic CH ortho to C1
    H6     opls_146     0.115     6
 ;  --- sp3 side chain ---
-   CA     opls_157     0.205     7   ; Calpha, sp3 secondary alcohol (charge adjusted)
+   CA     opls_219     0.260     7   ; Cα sp3 secondary alcohol (opls_219, benzyl-alcohol type)
    HA     opls_156     0.060     7
    OA     opls_154    -0.683     7   ; alpha-OH oxygen
    HOA    opls_155     0.418     7
-   CB     opls_136    -0.120     8   ; Cbeta, sp3 CH2 (alkyl, opls_136 = secondary CT)
+   CB     opls_136    -0.120     8   ; Cβ sp3 CH2 (no ether; plain alkyl in isolated monomer)
    HB1    opls_140     0.060     8
    HB2    opls_140     0.060     8
-   CG     opls_157     0.145     9   ; Cgamma, CH2-OH
+   CG     opls_157     0.145     9   ; Cγ CH2-OH
    HG1    opls_156     0.060     9
    HG2    opls_156     0.060     9
    OG     opls_154    -0.683     9
@@ -777,21 +786,22 @@
 ;        NO inter-residue bonds.  All atoms H-capped.  sp3 side chain.
 ;
 ; CHARGE GROUPS (cgnr 1–9, net residue = 0.000 e):
-;   cgnr 1   C1                         =  0.000
+;   cgnr 1   C1                         = −0.055  (opls_221, adjusted; = standard OPLS charge)
 ;   cgnr 2   C2+H2                      =  0.000
 ;   cgnr 3   C3+OM3+CM3+HM31+HM32+HM33 =  0.000  (+0.085−0.285+0.110+3×0.030)
 ;   cgnr 4   C4+O4H+HO4                 =  0.000
 ;   cgnr 5   C5+H5                      =  0.000
 ;   cgnr 6   C6+H6                      =  0.000
-;   cgnr 7   CA+HA+OA+HOA               =  0.000
+;   cgnr 7   CA+HA+OA+HOA               = +0.055  (opls_219: +0.260+0.060−0.683+0.418)
 ;   cgnr 8   CB+HB1+HB2                 =  0.000
 ;   cgnr 9   CG+HG1+HG2+OG+HOG         =  0.000
+;   sum = −0.055+0+0+0+0+0+0.055+0+0 = 0.000 e  ✓
 ; ==========================================================================
 [ GNM ]
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring ---
-   C1     opls_145     0.000     1
+   C1     opls_221    -0.055     1   ; Cipso (opls_221; q = standard OPLS-AA charge = −0.055)
    C2     opls_145    -0.115     2
    H2     opls_146     0.115     2
    C3     opls_199     0.085     3   ; C3 bearing -OCH3
@@ -808,11 +818,11 @@
    C6     opls_145    -0.115     6
    H6     opls_146     0.115     6
 ;  --- sp3 side chain ---
-   CA     opls_157     0.205     7
+   CA     opls_219     0.260     7   ; Cα sp3 secondary alcohol (opls_219, benzyl-alcohol type)
    HA     opls_156     0.060     7
    OA     opls_154    -0.683     7
    HOA    opls_155     0.418     7
-   CB     opls_136    -0.120     8
+   CB     opls_136    -0.120     8   ; Cβ sp3 CH2 (no ether; plain alkyl in isolated monomer)
    HB1    opls_140     0.060     8
    HB2    opls_140     0.060     8
    CG     opls_157     0.145     9
@@ -869,21 +879,22 @@
 ;        NO inter-residue bonds.  All atoms H-capped.  sp3 side chain.
 ;
 ; CHARGE GROUPS (cgnr 1–9, net residue = 0.000 e):
-;   cgnr 1   C1                         =  0.000
+;   cgnr 1   C1                         = −0.055  (opls_221, adjusted; = standard OPLS charge)
 ;   cgnr 2   C2+H2                      =  0.000
 ;   cgnr 3   C3+OM3+CM3+HM31+HM32+HM33 =  0.000
 ;   cgnr 4   C4+O4H+HO4                 =  0.000
 ;   cgnr 5   C5+OM5+CM5+HM51+HM52+HM53 =  0.000
 ;   cgnr 6   C6+H6                      =  0.000
-;   cgnr 7   CA+HA+OA+HOA               =  0.000
+;   cgnr 7   CA+HA+OA+HOA               = +0.055  (opls_219: +0.260+0.060−0.683+0.418)
 ;   cgnr 8   CB+HB1+HB2                 =  0.000
 ;   cgnr 9   CG+HG1+HG2+OG+HOG         =  0.000
+;   sum = −0.055+0+0+0+0+0+0.055+0+0 = 0.000 e  ✓
 ; ==========================================================================
 [ SNM ]
  [ atoms ]
 ;  name   type        charge   cgnr
 ;  --- aromatic ring ---
-   C1     opls_145     0.000     1
+   C1     opls_221    -0.055     1   ; Cipso (opls_221; q = standard OPLS-AA charge = −0.055)
    C2     opls_145    -0.115     2
    H2     opls_146     0.115     2
    C3     opls_199     0.085     3
@@ -904,11 +915,11 @@
    C6     opls_145    -0.115     6
    H6     opls_146     0.115     6
 ;  --- sp3 side chain ---
-   CA     opls_157     0.205     7
+   CA     opls_219     0.260     7   ; Cα sp3 secondary alcohol (opls_219, benzyl-alcohol type)
    HA     opls_156     0.060     7
    OA     opls_154    -0.683     7
    HOA    opls_155     0.418     7
-   CB     opls_136    -0.120     8
+   CB     opls_136    -0.120     8   ; Cβ sp3 CH2 (no ether; plain alkyl in isolated monomer)
    HB1    opls_140     0.060     8
    HB2    opls_140     0.060     8
    CG     opls_157     0.145     9

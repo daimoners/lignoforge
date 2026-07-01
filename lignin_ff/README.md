@@ -74,25 +74,27 @@ see `notes/atom_type_assignment.md` for the full per-atom justification.
 
 ## Key OPLS-AA Types
 
-| Group                        | Position              | Type       | q (e)  | Description                       |
-|------------------------------|-----------------------|------------|--------|-----------------------------------|
-| Aromatic ring                | C–H                   | `opls_145` | −0.115 | Benzene C (also Cipso, q→0)       |
-|                              | H on C–H              | `opls_146` | +0.115 | Benzene H                         |
-|                              | C–OH (free phenol)    | `opls_166` | +0.150 | Phenol ring C                     |
-|                              | C–O– (aryl ether)     | `opls_199` | +0.085 | Aryl ether C / anisole C          |
-| Free phenol –OH              | O                     | `opls_167` | −0.585 | Phenol O                          |
-|                              | H                     | `opls_168` | +0.435 | Phenol H                          |
-| Aryl ether –O– (β-O-4 / OMe) | O                    | `opls_179` | −0.285 | Aryl ether O                      |
-| Methoxy –OCH₃                | CH₃                   | `opls_181` | +0.110 | Methyl ether C                    |
-|                              | H on CH₃              | `opls_185` | +0.030 | Ether α-H                         |
-| Vinyl chain (monolignols)    | Cα, Cβ (sp2)          | `opls_142` | −0.115 | Alkene C                          |
-|                              | Hα, Hβ                | `opls_144` | +0.115 | Vinyl H                           |
-| sp3 chain (chain units)      | CA (α-OH), CB (α-ether) | `opls_157` | +0.140/+0.205 | sp3 C adjacent to O        |
-|                              | HA, HB                | `opls_156` | +0.060 | H on α-carbon                     |
-| γ-Alcohol                    | CG                    | `opls_157` | +0.145 | sp3 CH₂-OH carbon                 |
-|                              | H on CG               | `opls_156` | +0.060 | H on alcohol-adjacent C (corrected)|
-|                              | OG, OA                | `opls_154` | −0.683 | Aliphatic alcohol O               |
-|                              | HOG, HOA              | `opls_155` | +0.418 | Aliphatic alcohol H               |
+| Group                         | Position                 | Type       | q (e)        | Description                                    |
+|-------------------------------|--------------------------|------------|--------------|------------------------------------------------|
+| Aromatic ring                 | Cipso (no H, C1)         | `opls_221` | −0.085/−0.055/0.000 | Substituted aryl C; q adjusted per residue |
+|                               | C–H                      | `opls_145` | −0.115       | Benzene C                                      |
+|                               | H on C–H                 | `opls_146` | +0.115       | Benzene H                                      |
+|                               | C–OH (free phenol)       | `opls_166` | +0.150       | Phenol ring C                                  |
+|                               | C–O– (aryl ether)        | `opls_199` | +0.085       | Aryl ether C / anisole C                       |
+| Free phenol –OH               | O                        | `opls_167` | −0.585       | Phenol O                                       |
+|                               | H                        | `opls_168` | +0.435       | Phenol H                                       |
+| Aryl ether –O– (β-O-4 / OMe) | O                        | `opls_179` | −0.285       | Aryl ether O                                   |
+| Methoxy –OCH₃                 | CH₃                      | `opls_181` | +0.110       | Methyl ether C                                 |
+|                               | H on CH₃                 | `opls_185` | +0.030       | Ether α-H                                      |
+| Vinyl chain (monolignols)     | Cα, Cβ (sp²)             | `opls_142` | −0.115       | Alkene C                                       |
+|                               | Hα, Hβ                   | `opls_144` | +0.115       | Vinyl H                                        |
+| sp³ chain (chain units)       | CA – secondary alc. (Ar–CHOH) | `opls_219` | +0.260  | Benzyl-alcohol C; most specific for Cα         |
+|                               | CB – sp³ ether (–CH–O–Ar) | `opls_183` | +0.170      | Isopropyl-ether C; most specific for Cβ        |
+|                               | HA, HB                   | `opls_156` | +0.060       | H on sp³ chain C                               |
+| γ-Alcohol                     | CG                       | `opls_157` | +0.145       | sp³ CH₂–OH carbon                             |
+|                               | H on CG                  | `opls_156` | +0.060       | H on alcohol-adjacent C (corrected)            |
+|                               | OG, OA                   | `opls_154` | −0.683       | Aliphatic alcohol O                            |
+|                               | HOG, HOA                 | `opls_155` | +0.418       | Aliphatic alcohol H                            |
 
 ---
 

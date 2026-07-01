@@ -107,11 +107,12 @@ Atom-Type Table
      - q (e)
      - Notes
    * - ``C1``
-     - ipso aromatic C (no H)
-     - ``opls_145``
+     - ipso aromatic C (no H, bears propanoid chain)
+     - ``opls_221``
      - CA
-     - 0.000
-     - Charge corrected to 0.000; see :ref:`charge-corrections`
+     - see note
+     - Substituted aryl C; q adjusted per residue context by ``balance_charges()``;
+       see :ref:`charge-corrections`
    * - ``C2``, ``C6``
      - aromatic C–H (ortho/para to C1)
      - ``opls_145``
@@ -215,11 +216,11 @@ Atom-Type Table
      - +0.115
      - Sum CB+HB = 0.000 e
    * - ``CA``
-     - sp³ α-C of chain unit (bears α-OH)
-     - ``opls_157``
-     - CT(alcohol)
-     - +0.205
-     - 2-propanol model; α-OH on same C
+     - sp³ α-C of chain unit (bears α-OH; Ar–CHOH–)
+     - ``opls_219``
+     - CT(benzyl-alc.)
+     - +0.260
+     - Benzyl-alcohol type [Jorgensen1996]_; most specific for secondary alcohol α to aryl
    * - ``HA``
      - sp³ α-H
      - ``opls_156``
@@ -237,19 +238,19 @@ Atom-Type Table
      - ``opls_155``
      - HO(alcohol)
      - +0.418
-     - Sum CA+HA+OA+HOA = 0.000 e
+     - Sum CA+HA+OA+HOA = +0.055 e; absorbed into C1
    * - ``CB``
-     - sp³ β-C (bears inter-residue β-O-4 ether O)
-     - ``opls_157``
-     - CT(alcohol)
-     - +0.140
-     - No direct –OH; charge adjusted to maintain cg = 0.000 e
+     - sp³ β-C (bears inter-residue β-O-4 ether O; –CH–O–Ar)
+     - ``opls_183``
+     - CT(i-Pr ether)
+     - +0.170
+     - Isopropyl-ether type [Jorgensen1996]_; most specific for sp³ C bearing one ether O
    * - ``HB``
      - sp³ β-H
      - ``opls_156``
      - HC(alcohol)
      - +0.060
-     - From 2-propanol model
+     - From 2-propanol model; CB+HB = +0.230 e; absorbed into C1
    * - ``CG``
      - γ-CH₂ (bears γ-OH)
      - ``opls_157``
@@ -295,9 +296,9 @@ and the partial-charge sum for a prototypical G-type residue (``GYU``):
      - q sum (e)
      - Present in
    * - 1
-     - C1 (ipso)
-     - 0.000
-     - all residues
+     - C1 (ipso, ``opls_221``)
+     - −0.085 / −0.055 / 0.000
+     - GYU/HPU/SYU / HNM/GNM/SNM / GYM/HPM/SYM; C1 absorbs sp³ side-chain imbalance
    * - 2
      - C2 H2
      - 0.000
@@ -319,19 +320,20 @@ and the partial-charge sum for a prototypical G-type residue (``GYU``):
      - 0.000
      - all residues
    * - 7
-     - CA HA (vinyl) or CA HA OA HOA (sp³)
-     - 0.000
-     - monolignols; chain units
+     - CA HA (vinyl) or CA HA OA HOA (sp³, ``opls_219``)
+     - 0.000 (vinyl) / +0.055 (sp³, absorbed into C1)
+     - monolignols / chain units + ref. monomers
    * - 8
-     - CB HB (vinyl or sp³ chain)
-     - 0.000
+     - CB HB (vinyl or sp³ ether, ``opls_183``)
+     - 0.000 (vinyl) / +0.230 (sp³, absorbed into C1)
      - all residues
    * - 9
      - CG HG1 HG2 OG HOG
      - 0.000
      - all residues (all carry γ-OH)
 
-All nine residues verified: **net charge = 0.000 e**.
+All nine residues verified: **net charge = 0.000 e** (individual cgnr 1, 7, 8 may
+be non-zero in chain units; the imbalance is absorbed by C1 via ``balance_charges()``).
 
 ----
 
@@ -340,33 +342,44 @@ All nine residues verified: **net charge = 0.000 e**.
 Charge Corrections
 ------------------
 
-Two partial charges deviate from the raw OPLS-AA literature values and
-require justification:
+**C1 (ipso) → type ``opls_221``, q context-dependent**
 
-**C1 (ipso) → q = 0.000 e**
+``opls_221`` is the OPLS-AA type for a **substituted aryl carbon** (no attached H),
+with a standard database charge of −0.055 e and LJ parameters identical to
+``opls_145`` (aromatic CH).  In lignin, C1 is always trisubstituted (ring bond ×2
+plus propanoid chain), making ``opls_221`` more specific than ``opls_145``.
 
-In OPLS-AA phenol and toluene, the ipso carbon carries a partial charge
-of −0.130 e (paired with attached H, q = +0.130 e).  In all lignin ring
-carbons, C1 has **no attached H** (it bears the propanoid side chain).
-Following the Jorgensen convention for substituted aromatic carbons:
+Because the sp³ carbons in the propanoid side chain (Cα ``opls_219``, Cβ ``opls_183``)
+carry charges that differ from the vinyl types used in monolignols, a small
+per-residue charge imbalance arises that must be absorbed by C1 to maintain
+per-residue neutrality.  The function ``balance_charges()`` in
+``assign_chain_types.py`` computes this at run time:
 
-.. math::
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
 
-   q(C_\text{ipso}) = 0 \quad \text{when no H is attached}
-
-The remainder of the ring accounts for the missing −0.130 e via the
-phenol (C4/O4H/HO4) and OMe (C3/OM3) charge groups.
+   * - Residue context
+     - C1 charge (e)
+     - Explanation
+   * - Chain units: GYU / HPU / SYU
+     - −0.085
+     - Cα (+0.260) + Cβ (+0.170) vs. vinyl (−0.115 each): net imbalance +0.085
+   * - Ref. monomers: HNM / GNM / SNM
+     - −0.055
+     - Equals raw ``opls_221`` charge; self-consistent (no Cβ ether, Cα alone)
+   * - Monolignols: GYM / HPM / SYM
+     - 0.000
+     - Vinyl side chain (``opls_142``, q = −0.115 + H +0.115 = 0); no imbalance
 
 **HG1, HG2 (γ-methylene H) → q = +0.060 e**
 
-The raw OPLS-AA 1-propanol atom type for methylene H is +0.040 e
-(``opls_140``, generic –CH₂– in a chain).  However, the GROMACS
-reference compound ``1propanol.itp`` lists the methylene adjacent to the
-hydroxyl-bearing carbon with q = +0.060 e, matching the 2-propanol model
-for a –CH₂OH group.  Since Cγ carries –CH₂OH in all lignin residues,
-q(HG) = +0.060 e is used throughout.
+The raw OPLS-AA generic CH₂ H type carries +0.040 e.  The GROMACS reference
+``1propanol.itp`` uses +0.060 e for the methylene adjacent to the hydroxyl-bearing
+carbon (the –CH₂OH group).  Since Cγ in all lignin residues is –CH₂OH, q(HG) =
++0.060 e is used throughout.
 
-Combined effect: charge group 9 sums to:
+Combined effect: charge group 9 (Cγ–OH) sums to:
 
 .. math::
 
@@ -393,13 +406,17 @@ Chain units (``GYU``, ``HPU``, ``SYU``) and reference compounds
 
 .. code-block:: text
 
-   CA  opls_157  (CT, bears –OA–)  q = +0.205
-   HA  opls_156  (HC, ether adj.)  q = +0.060
-   CB  opls_157  (CT, bears inter-res. O- in chain units)  q = +0.140
-   HB  opls_156                    q = +0.060
+   CA  opls_219  (CT, benzyl-alcohol secondary C; Ar–CHOH–)  q = +0.260
+   HA  opls_156  (HC)                                        q = +0.060
+   CB  opls_183  (CT, i-Pr ether secondary C; –CH–O–Ar)     q = +0.170  [chain units only]
+   HB  opls_156  (HC)                                        q = +0.060
 
-The Cα–OH and Cβ–O (ether) groups in chain units reproduce the local
-electrostatics of secondary alcohols and dialkyl ethers, respectively.
+``opls_219`` (benzyl-alcohol type) is more specific than the generic
+secondary-alcohol type ``opls_157`` for Cα because Cα is adjacent to the
+aromatic ring.  ``opls_183`` (isopropyl-ether type) is the most specific
+available OPLS-AA type for a secondary sp³ carbon bearing one ether oxygen.
+Both types share the same LJ parameters as ``opls_157`` (σ = 3.50 Å,
+ε = 0.276 kJ/mol); only the partial charges differ.
 
 ----
 
