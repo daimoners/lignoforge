@@ -19,11 +19,14 @@ Design principles
 * **Deterministic** – given the same PDB the output is always identical.
 * **Maximally stable types** – atom types are changed only at atoms
   directly involved in a linkage.
-* **Per-residue net charge = 0.000 e** – any imbalance introduced by
-  removed/added atoms at linkage sites is absorbed on C1 (ipso) via
-  balance_charges().  C1 uses opls_221 (substituted aryl C, same LJ as
-  opls_145 but the semantically correct OPLS type for a trisubstituted
-  aromatic C bearing an alkyl chain).
+* **Reference charge distribution** – C1 (ipso, opls_221) is fixed at its
+  raw OPLS-AA charge of −0.055 e.  For interior units carrying *both* a
+  C4-aryl-ether and a Cβ-ether (e.g. GYU), the remaining imbalance is
+  absorbed on HB (opls_185, +0.040), HG1/HG2 (+0.040), and a small
+  correction to C4/O4H (+0.095/−0.275), giving per-residue neutrality.
+  Terminal units with only one ether modification carry a residual charge
+  (±0.240 e for β-O-4) that cancels across the chain.  C1 uses opls_221
+  (substituted aryl C, same LJ as opls_145).
 * Supports all 7 lignin linkage types:
   beta-O-4, 5-5, 4-O-5, beta-5, beta-beta, alpha-O-4, beta-1.
 * Identical residue environments (same monomer type + same linkage
@@ -55,27 +58,35 @@ BASE_TO_NM   = {"H": "HNM", "G": "GNM", "S": "SNM"}
 _T = Dict[str, Tuple[str, str, float]]
 
 ATYPE: _T = {
-    "CA_ipso":    ("opls_221", "CA",  0.000),   # substituted aryl C (no H); q adjusted by balance_charges
-    "CA_plain":   ("opls_145", "CA", -0.115),
-    "HA_arom":    ("opls_146", "HA",  0.115),
-    "CA_phenol":  ("opls_166", "CA",  0.150),
-    "OH_phenol":  ("opls_167", "OH", -0.585),
-    "HO_phenol":  ("opls_168", "HO",  0.435),
-    "CA_ether":   ("opls_199", "CA",  0.085),
-    "OS_ether":   ("opls_179", "OS", -0.285),
-    "CT_methoxy": ("opls_181", "CT",  0.110),
-    "HC_methoxy": ("opls_185", "HC",  0.030),
-    "CT_alc":     ("opls_157", "CT",  0.145),   # Cγ CH2-OH (primary alcohol)
-    "CT_Ca_alc":  ("opls_219", "CT",  0.260),   # Cα sp3 secondary alcohol (benzyl-alcohol type)
-    "CT_Cb_eth":  ("opls_183", "CT",  0.170),   # Cβ/Cα sp3 ether C (i-Pr ether type)
-    "HC_alc":     ("opls_156", "HC",  0.040),
-    "OH_alc":     ("opls_154", "OH", -0.683),
-    "HO_alc":     ("opls_155", "HO",  0.418),
-    "CT_CH2":     ("opls_136", "CT", -0.120),   # sp3 CH2, no heteroatom
-    "HC_alkyl":   ("opls_140", "HC",  0.060),
-    "CT_CH":      ("opls_137", "CT", -0.060),   # sp3 CH (tertiary/secondary)
-    "CM_vinyl":   ("opls_142", "CM", -0.115),
-    "HC_vinyl":   ("opls_144", "HC",  0.115),
+    "CA_ipso":      ("opls_221", "CA", -0.055),  # substituted aryl C (no H); fixed raw OPLS-221 charge
+    "CA_plain":     ("opls_145", "CA", -0.115),
+    "HA_arom":      ("opls_146", "HA",  0.115),
+    "CA_phenol":    ("opls_166", "CA",  0.150),
+    "OH_phenol":    ("opls_167", "OH", -0.585),
+    "HO_phenol":    ("opls_168", "HO",  0.435),
+    "CA_ether":     ("opls_199", "CA",  0.085),  # aryl ether C (standard, e.g. terminal O4H-donor)
+    "CA_ether_adj": ("opls_199", "CA",  0.095),  # aryl ether C (adjusted +0.010 for interior units)
+    "OS_ether":     ("opls_179", "OS", -0.285),  # aryl ether O (standard)
+    "OS_ether_adj": ("opls_179", "OS", -0.275),  # aryl ether O (adjusted +0.010 for interior units)
+    "CT_methoxy":   ("opls_181", "CT",  0.110),
+    "HC_methoxy":   ("opls_185", "HC",  0.030),
+    "CT_alc":       ("opls_157", "CT",  0.145),  # Cγ CH2-OH (primary alcohol)
+    "CT_Ca_alc":    ("opls_219", "CT",  0.260),  # Cα sp3 secondary alcohol (benzyl-alcohol type)
+    "CT_Cb_eth":    ("opls_183", "CT",  0.180),  # Cβ sp3 ether C (i-Pr ether type); +0.180
+    "HC_alc":       ("opls_156", "HC",  0.040),  # raw opls_156 value
+    "HC_alc_cor":   ("opls_156", "HC",  0.060),  # 1-propanol corrected value (for HG, HA, HB terminal)
+    "HC_eth":       ("opls_185", "HC",  0.040),  # H on sp3 ether C (interior units; same type as methoxy H)
+    "OH_alc":       ("opls_154", "OH", -0.683),
+    "HO_alc":       ("opls_155", "HO",  0.418),
+    "CT_CH2":       ("opls_136", "CT", -0.120),  # sp3 CH2, no heteroatom
+    "HC_alkyl":     ("opls_140", "HC",  0.060),
+    "CT_CH":        ("opls_137", "CT", -0.060),  # sp3 CH (tertiary/secondary)
+    "CM_vinyl":     ("opls_142", "CM", -0.115),
+    "HC_vinyl":     ("opls_144", "HC",  0.115),
+    # Vinyl Cα in chain-tail units (C4-ether donor, no Cβ-ether): non-standard
+    # charges chosen so that GY1 net = −0.240 e, cancelling the +0.240 of GY0.
+    "CM_vinyl_tail": ("opls_142", "CM", -0.105),
+    "HC_vinyl_tail": ("opls_144", "HC",  0.120),
 }
 
 
@@ -129,11 +140,11 @@ def _ring_atoms(base: str) -> dict:
 def _sidechain_atoms() -> dict:
     """sp3 side-chain atoms for isolated neutral monomer (Cα-OH, Cβ-CH2, Cγ-OH).
 
-    CA uses opls_219 (benzyl-alcohol sp3 C, standard charge +0.260).
-    The residue-level imbalance (+0.055 from cgnr7) is absorbed on C1 by
-    balance_charges(), which sets C1 = -0.055 for neutral reference monomers.
+    CA uses opls_219 (+0.260).  With C1 fixed at −0.055 (raw opls_221), the
+    +0.055 imbalance from the Cα-OH group is absorbed and the reference
+    monomers (HNM/GNM/SNM) remain exactly neutral (−0.055 + 0.055 = 0.000).
     """
-    _op, _gt, _ = at("HC_alc")
+    _op, _gt, _ = at("HC_alc_cor")  # opls_156 at +0.060 (1-propanol corrected)
     a = {
         "CA":  (*at("CT_Ca_alc"),    7, "Cα sp3 secondary alcohol (opls_219)"),
         "HA":  (_op, _gt, 0.060,     7, "H on Cα"),
@@ -226,20 +237,29 @@ LINKAGE_MODS: Dict[str, Dict[str, dict]] = {
     # Bond formed: O4H (phenol-O of this unit) — CB (β-C of other unit)
     # Donor (provides O4H): phenol C4→ether C4, phenol O→ether O, HO4 removed.
     # Acceptor (provides CB): sp3 CH2→sp3 ether CH (one HB removed, CB: sp3 C-O).
+    #
+    # Charge strategy: C1 fixed at raw opls_221 = −0.055.  Interior units (both
+    # C4-ether and Cβ-ether active) achieve per-residue neutrality via:
+    #   C4 = +0.095 / O4H = −0.275 (adjusted +0.010/+0.010 from standard)
+    #   CB  = +0.180 (adjusted +0.010 from opls_183 raw +0.170)
+    #   HB  = opls_185 +0.040   HG1/HG2 = +0.040
+    # Terminal units (single ether only) use standard/+0.060 values and carry
+    # a residual ±0.240 e that cancels at the chain level.
+    # The values below reflect the interior (GYU) context.
     "beta-O-4": {
-        "O4H": {   # this residue is the ether-O DONOR (C4-O4H side)
+        "O4H": {   # this residue is the ether-O DONOR (C4-O4H side) — interior values
             "type_changes": {
-                "C4":  ("opls_199", "CA",  +0.085),  # phenol C → aryl ether C
-                "O4H": ("opls_179", "OS",  -0.285),  # phenol O → aryl ether O
+                "C4":  ("opls_199", "CA",  +0.095),  # phenol C → aryl ether C (adjusted)
+                "O4H": ("opls_179", "OS",  -0.275),  # phenol O → aryl ether O (adjusted)
             },
             "remove":  ["HO4"],
             "rename":  {},
             "add":     {},
         },
-        "CB": {    # this residue is the ether-C ACCEPTOR (Cβ side)
+        "CB": {    # this residue is the ether-C ACCEPTOR (Cβ side) — interior values
             "type_changes": {
-                "CB":  ("opls_183", "CT",  +0.170),  # CH2 → ether CH (i-Pr ether type)
-                "HB1": ("opls_156", "HC",  +0.060),  # H on ether CH
+                "CB":  ("opls_183", "CT",  +0.180),  # CH2 → ether CH (i-Pr ether type)
+                "HB1": ("opls_185", "HC",  +0.040),  # H on ether CH (opls_185, ether H type)
             },
             "remove":  ["HB2"],   # CB: CH2 → CH (one H removed)
             "rename":  {"HB1": "HB"},
@@ -669,9 +689,21 @@ def _type_residue_atoms(
     ic    = linkage_context  # {atom_name: (lname, pos)}
     typed: dict = {}
 
+    # Context: interior unit carries both a C4-aryl-ether AND a Cβ-ether.
+    # Used to select between adjusted (interior) and standard (terminal) charges.
+    has_C4_ether = ("HO4" not in pdb) and ("O4H" in pdb) and ("C4" in pdb)
+    has_CB_ether = "OA" in pdb
+    both_ether   = has_C4_ether and has_CB_ether
+
     # ── Aromatic ring ─────────────────────────────────────────────────────────
+    # C1 = raw opls_221 (−0.055) for sp3 chain units and ether-bearing units.
+    # Exception: vinyl monolignols (free phenol + no α-OH) have no sp3 imbalance,
+    # so the ring+vinyl sidechain already sums to 0 → C1 = 0.000.
     if "C1" in pdb:
-        typed["C1"] = ("opls_221", "CA",  0.000, 1, "Cipso (adjusted by balance_charges)")
+        vinyl_monolignol = ("HO4" in pdb) and ("OA" not in pdb)
+        c1_q = 0.000 if vinyl_monolignol else -0.055
+        c1_lbl = "Cipso (vinyl monolignol)" if vinyl_monolignol else "Cipso (raw opls_221; fixed)"
+        typed["C1"] = ("opls_221", "CA", c1_q, 1, c1_lbl)
 
     if "C2" in pdb:
         typed["C2"] = ("opls_145", "CA", -0.115, 2, "aromatic CH")
@@ -698,12 +730,14 @@ def _type_residue_atoms(
         if "HO4" in pdb:
             typed["C4"]  = ("opls_166", "CA",  0.150, 4, "C4 phenol")
         else:
-            typed["C4"]  = ("opls_199", "CA",  0.085, 4, "C4 aryl ether")
+            c4_q = 0.095 if both_ether else 0.085
+            typed["C4"]  = ("opls_199", "CA",  c4_q, 4, f"C4 aryl ether{' (adj)' if both_ether else ''}")
     if "O4H" in pdb:
         if "HO4" in pdb:
             typed["O4H"] = ("opls_167", "OH", -0.585, 4, "phenol O")
         else:
-            typed["O4H"] = ("opls_179", "OS", -0.285, 4, "aryl ether O")
+            o4h_q = -0.275 if both_ether else -0.285
+            typed["O4H"] = ("opls_179", "OS",  o4h_q, 4, f"aryl ether O{' (adj)' if both_ether else ''}")
     if "HO4" in pdb:
         typed["HO4"] = ("opls_168", "HO",  0.435, 4, "phenol H")
 
@@ -755,10 +789,19 @@ def _type_residue_atoms(
             if "HOA" in pdb:
                 typed["HOA"] = ("opls_155", "HO",  0.418, 7, "α-OH H")
         else:
-            # vinyl sp2
-            typed["CA"] = ("opls_142", "CM", -0.115, 7, "Cα vinyl sp2")
-            if "HA" in pdb:
-                typed["HA"] = ("opls_144", "HC",  0.115, 7, "Cα vinyl H")
+            # vinyl sp2; for β-O-4 O4H-donor tail units, use adjusted charges
+            # so that tail net (−0.240) cancels the β-O-4 head (+0.240).
+            is_bO4_tail = has_C4_ether and any(
+                ln == "beta-O-4" and pos == "O4H" for ln, pos in ic.values()
+            )
+            if is_bO4_tail:
+                typed["CA"] = ("opls_142", "CM", -0.105, 7, "Cα vinyl sp2 (β-O-4 tail adj)")
+                if "HA" in pdb:
+                    typed["HA"] = ("opls_144", "HC",  0.120, 7, "Cα vinyl H (β-O-4 tail adj)")
+            else:
+                typed["CA"] = ("opls_142", "CM", -0.115, 7, "Cα vinyl sp2")
+                if "HA" in pdb:
+                    typed["HA"] = ("opls_144", "HC",  0.115, 7, "Cα vinyl H")
     # OA/HOA that escaped the block above (shouldn't normally happen)
     if "OA" in pdb and "OA" not in typed:
         typed["OA"]  = ("opls_154", "OH", -0.683, 7, "α-OH O")
@@ -773,9 +816,10 @@ def _type_residue_atoms(
     if "CB" in pdb:
         lkCB, posCB = ic.get("CB", (None, None))
         if "OA" in pdb:
-            typed["CB"] = ("opls_183", "CT",  0.170, 8, "Cβ sp3 ether (β-O-4, i-Pr ether type)")
+            hb_q = 0.040 if both_ether else 0.060
+            typed["CB"] = ("opls_183", "CT",  0.180, 8, "Cβ sp3 ether (β-O-4, i-Pr ether type)")
             if "HB" in pdb:
-                typed["HB"] = ("opls_156", "HC",  0.060, 8, "H on Cβ ether")
+                typed["HB"] = ("opls_185", "HC",  hb_q, 8, f"H on Cβ ether{' (adj)' if both_ether else ''}")
         elif lkCB in ("beta-5", "beta-beta", "beta-1"):
             typed["CB"] = ("opls_137", "CT", -0.060, 8, "Cβ sp3 CH (C-C bond)")
             if "HB" in pdb:
@@ -789,9 +833,10 @@ def _type_residue_atoms(
     if "CG" in pdb:
         typed["CG"]  = ("opls_157", "CT",  0.145, 9, "Cγ CH2-OH")
     if "HG1" in pdb:
-        typed["HG1"] = ("opls_156", "HC",  0.060, 9, "H on Cγ")
+        hg_q = 0.040 if both_ether else 0.060
+        typed["HG1"] = ("opls_156", "HC",  hg_q, 9, "H on Cγ")
     if "HG2" in pdb:
-        typed["HG2"] = ("opls_156", "HC",  0.060, 9, "H on Cγ")
+        typed["HG2"] = ("opls_156", "HC",  hg_q, 9, "H on Cγ")
     if "OG" in pdb:
         lkOG, posOG = ic.get("OG", (None, None))
         if lkOG == "beta-beta":
@@ -889,26 +934,41 @@ def assign_types_to_chain(
     return typed
 
 
-# ── Per-residue charge balancing ──────────────────────────────────────────────
+# ── Per-residue charge balancing / verification ────────────────────────────────
 
 def balance_charges(typed: dict) -> dict:
     """
-    Ensure each residue has net charge = 0.000 e by adjusting C1 charge.
+    Per-residue charge handler — hybrid policy:
 
-    The ipso C1 has no formal OPLS-AA charge constraint (set to 0.000 by
-    convention for substituted benzenes).  Any small imbalance introduced by
-    linkage atom removal/type-changes is absorbed here.
+    **β-O-4 residues** (only β-O-4 linkages or no linkages):
+        C1 is fixed at raw opls_221 (−0.055 or 0.000 for vinyl monolignols).
+        Interior units are neutral; terminal units carry ±0.240 e that cancel
+        at chain level.  A warning is emitted only if the residual exceeds
+        ±0.300 e (unexpected imbalance).
+
+    **Other linkage types** (5-5, 4-O-5, β-5, β-β, α-O-4, β-1, mixed):
+        C1 is adjusted to achieve per-residue neutrality (legacy behavior).
+        This preserves correctness for linkages not yet fully parameterised
+        with the β-O-4 reference convention.
     """
     for rseq, tr in typed.items():
+        linkage_types = {ln for ln, _ in tr.get("linkages", [])}
+        is_bO4_only   = not linkage_types or linkage_types <= {"beta-O-4"}
         net = round(sum(rec[2] for rec in tr["atoms"].values()), 6)
-        if abs(net) > 1e-5:
-            if "C1" in tr["atoms"]:
-                old = tr["atoms"]["C1"]
-                new_q = round(old[2] - net, 6)
-                tr["atoms"]["C1"] = (old[0], old[1], new_q, old[3], old[4])
-            else:
-                print(f"  [warn] res {rseq}: net charge {net:+.4f} e, C1 not found for adjustment",
+
+        if is_bO4_only:
+            if abs(net) > 0.300:
+                print(f"  [warn] res {rseq}: β-O-4 net {net:+.4f} e exceeds ±0.300 e",
                       file=sys.stderr)
+        else:
+            if abs(net) > 1e-5:
+                if "C1" in tr["atoms"]:
+                    old = tr["atoms"]["C1"]
+                    new_q = round(old[2] - net, 6)
+                    tr["atoms"]["C1"] = (old[0], old[1], new_q, old[3], old[4])
+                else:
+                    print(f"  [warn] res {rseq}: net {net:+.4f} e, C1 not found",
+                          file=sys.stderr)
     return typed
 
 

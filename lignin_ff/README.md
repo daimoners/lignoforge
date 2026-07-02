@@ -56,7 +56,7 @@ CB   +O4H    ; CB of this unit → aryl ether O of the next residue
 | `HNM`       | dihydro-p-coumaryl alcohol (H)   |
 | `SNM`       | dihydrosinapyl alcohol (S)       |
 
-**Net charge: 0.000 e** for all 9 residues (verified per charge group).
+**Net charge:** 0.000 e for interior units (GYU/HPU/SYU) and all isolated monomers. Terminal β-O-4 head/tail units carry ±0.240 e that cancel at chain level (total chain = 0.000 e).
 
 ---
 
@@ -76,23 +76,33 @@ see `notes/atom_type_assignment.md` for the full per-atom justification.
 
 | Group                         | Position                 | Type       | q (e)        | Description                                    |
 |-------------------------------|--------------------------|------------|--------------|------------------------------------------------|
-| Aromatic ring                 | Cipso (no H, C1)         | `opls_221` | −0.085/−0.055/0.000 | Substituted aryl C; q adjusted per residue |
+| Aromatic ring                 | Cipso (no H, C1)         | `opls_221` | −0.055 (fixed) | Raw OPLS-AA charge; same for all residue types |
 |                               | C–H                      | `opls_145` | −0.115       | Benzene C                                      |
 |                               | H on C–H                 | `opls_146` | +0.115       | Benzene H                                      |
 |                               | C–OH (free phenol)       | `opls_166` | +0.150       | Phenol ring C                                  |
-|                               | C–O– (aryl ether)        | `opls_199` | +0.085       | Aryl ether C / anisole C                       |
+|                               | C–O– (aryl ether, terminal) | `opls_199` | +0.085    | Standard aryl ether C / anisole C              |
+|                               | C–O– (aryl ether, interior) | `opls_199` | +0.095    | Adjusted +0.010 for interior units             |
 | Free phenol –OH               | O                        | `opls_167` | −0.585       | Phenol O                                       |
 |                               | H                        | `opls_168` | +0.435       | Phenol H                                       |
-| Aryl ether –O– (β-O-4 / OMe) | O                        | `opls_179` | −0.285       | Aryl ether O                                   |
+| Aryl ether –O– (β-O-4)       | O (terminal)             | `opls_179` | −0.285       | Standard aryl ether O                          |
+|                               | O (interior)             | `opls_179` | −0.275       | Adjusted +0.010 for interior units             |
+| Aryl ether –O– (OMe)         | O                        | `opls_179` | −0.285       | Methoxy / anisole ether O                      |
 | Methoxy –OCH₃                 | CH₃                      | `opls_181` | +0.110       | Methyl ether C                                 |
 |                               | H on CH₃                 | `opls_185` | +0.030       | Ether α-H                                      |
-| Vinyl chain (monolignols)     | Cα, Cβ (sp²)             | `opls_142` | −0.115       | Alkene C                                       |
-|                               | Hα, Hβ                   | `opls_144` | +0.115       | Vinyl H                                        |
+| Vinyl chain (monolignols)     | Cα sp² (isolated)        | `opls_142` | −0.115       | Standard alkene C                              |
+|                               | Cα sp² (chain tail donor) | `opls_142` | −0.105      | Adjusted so tail net = −0.240 e                |
+|                               | Hα (isolated)            | `opls_144` | +0.115       | Standard vinyl H                               |
+|                               | Hα (chain tail donor)    | `opls_144` | +0.120       | Adjusted for tail neutrality                   |
+|                               | Cβ sp²                   | `opls_142` | −0.115       | Alkene C                                       |
+|                               | Hβ                       | `opls_144` | +0.115       | Vinyl H                                        |
 | sp³ chain (chain units)       | CA – secondary alc. (Ar–CHOH) | `opls_219` | +0.260  | Benzyl-alcohol C; most specific for Cα         |
-|                               | CB – sp³ ether (–CH–O–Ar) | `opls_183` | +0.170      | Isopropyl-ether C; most specific for Cβ        |
-|                               | HA, HB                   | `opls_156` | +0.060       | H on sp³ chain C                               |
+|                               | CB – sp³ ether (–CH–O–Ar) | `opls_183` | +0.180      | Isopropyl-ether C; +0.180 (adjusted from OPLS raw) |
+|                               | HB on CB ether (interior) | `opls_185` | +0.040      | H on sp³ ether C (interior units)              |
+|                               | HB on CB ether (terminal) | `opls_185` | +0.060      | H on sp³ ether C (terminal units)              |
+|                               | HA on Cα                 | `opls_156` | +0.060       | H on sp³ alcohol C                             |
 | γ-Alcohol                     | CG                       | `opls_157` | +0.145       | sp³ CH₂–OH carbon                             |
-|                               | H on CG                  | `opls_156` | +0.060       | H on alcohol-adjacent C (corrected)            |
+|                               | HG1, HG2 (interior)      | `opls_156` | +0.040       | H on Cγ — adjusted for interior units          |
+|                               | HG1, HG2 (terminal)      | `opls_156` | +0.060       | H on Cγ — standard/terminal value              |
 |                               | OG, OA                   | `opls_154` | −0.683       | Aliphatic alcohol O                            |
 |                               | HOG, HOA                 | `opls_155` | +0.418       | Aliphatic alcohol H                            |
 

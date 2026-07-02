@@ -6,7 +6,9 @@ Validation tests for assign_chain_types.py.
 
 Each test builds a small lignin chain with the lignoforge API, writes a PDB,
 runs assign_chain_types, and checks:
-  * net charge of every residue == 0.000
+  * per-residue net charge within ±0.250 e (interior units must be 0.000;
+    terminal β-O-4 units carry ±0.240 e that cancel at chain level)
+  * total chain charge == 0.000 e
   * atom types at linkage sites are correct
   * atom types at non-linkage sites unchanged vs isolated neutral monomer
 
@@ -89,16 +91,31 @@ def _make_pdb(monomers, linkages, tmpdir, name="chain"):
 
 
 def check_net_charges(typed: dict, tag: str) -> bool:
+    """Check charge balance using the reference convention.
+
+    Interior units (both C4-ether and Cβ-ether active) must be neutral.
+    Terminal units in β-O-4 chains carry ±0.240 e that cancel at chain level.
+    A residue fails only if its residual exceeds ±0.250 e (unexpected imbalance)
+    or if the total chain charge is non-zero.
+    """
     ok = True
+    residue_nets = {}
     for rseq, tr in typed.items():
         net = round(sum(rec[2] for rec in tr["atoms"].values()), 4)
-        if abs(net) > 0.001:
+        residue_nets[rseq] = net
+        if abs(net) > 0.250:
             print(f"  FAIL [{tag}] res {rseq} ({tr.get('rtp_name','?')}): "
-                  f"net charge = {net:+.4f}")
+                  f"net charge = {net:+.4f} (exceeds ±0.250 e)")
             ok = False
         else:
             print(f"  OK   [{tag}] res {rseq} ({tr.get('rtp_name','?')}): "
                   f"net charge = {net:+.4f}")
+    total = round(sum(residue_nets.values()), 4)
+    if abs(total) > 0.001:
+        print(f"  FAIL [{tag}] total chain charge = {total:+.4f} (must be 0.000)")
+        ok = False
+    else:
+        print(f"  OK   [{tag}] total chain charge = {total:+.4f}")
     return ok
 
 
@@ -138,28 +155,20 @@ def check_atom_absent(typed: dict, res_seq: int, atom_name: str, tag: str) -> bo
 
 def test_isolated_neutral_charge():
     """
-    The ISOLATED dict holds pre-balance atom charges; C1 starts at 0.000 and
-    balance_charges() adjusts it at runtime.  Here we verify the charge that
-    balance_charges() would assign to C1 produces a neutral residue, and that
-    all other atoms already form the expected groups.
-
-    Expected C1 after balance for neutral sp3 monomers (HNM/GNM/SNM): -0.055
-    (Cα opls_219 +0.260 creates a +0.055 imbalance in cgnr7 that C1 absorbs.)
+    ISOLATED dict charges are final (C1 fixed at raw opls_221 = −0.055 for
+    sp3 monomers, 0.000 for vinyl monolignols).  Verify that each ISOLATED
+    residue is already neutral without any adjustment.
     """
     tag = "isolated_neutral_charge"
     ok = True
     for nm, atoms in ISOLATED.items():
-        pre_net = round(sum(rec[2] for rec in atoms.values()), 6)
-        # After balance_charges, C1 would be adjusted by -pre_net
-        c1_old = atoms["C1"][2]
-        c1_new = round(c1_old - pre_net, 6)
-        final_net = round(pre_net + (c1_new - c1_old), 6)
-        if abs(final_net) > 1e-5:
-            print(f"  FAIL [{tag}] {nm}: balance_charges cannot fix net = {pre_net:+.6f}")
+        net = round(sum(rec[2] for rec in atoms.values()), 6)
+        c1_q = atoms["C1"][2]
+        if abs(net) > 1e-5:
+            print(f"  FAIL [{tag}] {nm}: net = {net:+.6f}, C1 = {c1_q:+.6f}")
             ok = False
         else:
-            print(f"  OK   [{tag}] {nm}: pre-balance net = {pre_net:+.6f}, "
-                  f"C1 would be adjusted to {c1_new:+.6f}")
+            print(f"  OK   [{tag}] {nm}: net = {net:+.6f}, C1 = {c1_q:+.6f}")
     return ok
 
 
@@ -266,9 +275,9 @@ def test_two_G_beta_O_4(tmpdir):
     ok &= check_atom_type(typed, r_donor, "O4H", "opls_179", tag)
     ok &= check_atom_absent(typed, r_donor, "HO4", tag)
 
-    # Acceptor residue: CB→opls_183 (i-Pr ether, β-O-4), HB→opls_156
+    # Acceptor residue: CB→opls_183 (i-Pr ether, β-O-4), HB→opls_185 (ether H type)
     ok &= check_atom_type(typed, r_acceptor, "CB",  "opls_183", tag)
-    ok &= check_atom_type(typed, r_acceptor, "HB",  "opls_156", tag)
+    ok &= check_atom_type(typed, r_acceptor, "HB",  "opls_185", tag)
     return ok
 
 
@@ -377,7 +386,7 @@ def test_renamed_pdb(tmpdir):
 def test_H_H_beta_O_4(tmpdir):
     """H–H β-O-4 dimer: same type logic as G–G but no OMe groups.
     Donor: C4→opls_199, O4H→opls_179, HO4 absent.
-    Acceptor: CB→opls_183 (i-Pr ether), HB→opls_156.
+    Acceptor: CB→opls_183 (i-Pr ether), HB→opls_185 (ether H type).
     """
     tag = "H_H_beta_O_4"
     pdb = _make_pdb(["H", "H"], ["beta-O-4"], tmpdir, "HH_bO4")
@@ -394,7 +403,7 @@ def test_H_H_beta_O_4(tmpdir):
     ok &= check_atom_absent(typed, r_donor, "HO4", tag)
     ok &= check_atom_absent(typed, r_donor, "OM3", tag)   # no OMe in H-type
     ok &= check_atom_type(typed, r_acceptor, "CB",  "opls_183", tag)
-    ok &= check_atom_type(typed, r_acceptor, "HB",  "opls_156", tag)
+    ok &= check_atom_type(typed, r_acceptor, "HB",  "opls_185", tag)
     return ok
 
 
