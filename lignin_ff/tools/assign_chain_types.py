@@ -5,6 +5,11 @@ lignin_ff/tools/assign_chain_types.py
 Assign OPLS-AA atom types to a lignin polymer-chain PDB and write
 per-chain custom topology RTP files.
 
+.. warning:: LEGACY.  The ``pdb2gmx`` route cannot express arbitrary
+   inter-residue connectivity (only residues i±1), and the RTP written here
+   lacks the ``all_dihedrals`` column.  Use ``lignoforge-chain --format
+   gromacs`` (package ``lignoforge.forcefield``) instead.
+
 Usage
 -----
     python assign_chain_types.py chain.pdb [-o chain_custom.rtp]

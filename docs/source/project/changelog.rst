@@ -5,6 +5,52 @@ Changelog
 All notable changes to LignoForge are documented here.
 
 ---------
+v0.2.2
+---------
+
+*Unreleased.*
+
+New features
+~~~~~~~~~~~~
+
+* **Graph-based GROMACS topology generation** (``lignoforge.forcefield``,
+  ``lignoforge-chain --format gromacs``).  Writes ``.top``, ``.gro`` and
+  ``em.mdp`` directly from the bond graph, with OPLS-AA types assigned from
+  atom names and linkage context.  No ``pdb2gmx`` and no assumption about
+  residue order, so linear, branched and ring-closed chains are all valid.
+  All angles, proper dihedrals, 1-4 pairs and aromatic impropers are derived
+  from the graph; bonded parameters are resolved by ``grompp`` from
+  ``oplsaa.ff``.
+* **Charge scheme**: C–O–C bridges built from ``opls_199/179`` and
+  ``opls_183/185`` are neutral by construction; any residual per residue is
+  removed by spreading it uniformly over that residue's atoms
+  (largest shift < 0.015 e), so the total charge is exactly 0 for any topology.
+
+* **Atomistic MD workflow** (``lignoforge.md``, ``--format md``): box,
+  solvation (TIP3P/SPC/E or vacuum), EM, NVT, NPT and production ``.mdp``
+  files plus an executable ``run.sh``.
+* **Coarse-grained model** (``lignoforge.cg``, ``--format cg``): one bead per
+  monomer, linkage-keyed harmonic bonds and angles, LJ beads, stochastic
+  dynamics, multi-chain boxes via ``gmx insert-molecules``.  Parameters are
+  serialisable (``CGParameters``) and can be derived from atomistic MD with
+  Boltzmann inversion (``lignoforge-cg-fit``).  Shipped defaults are
+  provisional.
+
+Bug fixes
+~~~~~~~~~
+
+* ``--branching 0`` (and the default) now yields strictly linear chains.
+  Previously 0 was treated as "unrestricted" in the exact-size growth path,
+  so any monomer with a free C4/C5/Cβ site could branch.
+* Cα that already carries an α-OH (β-O-4 acceptor) can no longer accept a
+  second oxygen (α-O-4 / β-5 / β-β), which produced chemically invalid acetals.
+* Chain growth that cannot reach the requested size now emits a
+  ``RuntimeWarning`` instead of silently returning a shorter chain.
+* The legacy RTP lacked ``all_dihedrals`` and generated only 57 of 332
+  dihedrals for a 5-mer.  Added missing OPLS torsions ``CA-CA-CM-HC`` and
+  ``CA-CT-CT-CA``.
+
+---------
 v0.2.1
 ---------
 

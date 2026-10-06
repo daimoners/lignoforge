@@ -159,6 +159,9 @@ class PolymerGraph:
                             mi=alpha_node["mi"],
                         )
                         bond_list.append((alpha_idx, O_alpha_idx))
+                        # Cα now carries its α-OH: it must not accept a second
+                        # oxygen (α-O-4 / β-5 / β-β ring closure → acetal).
+                        extra_unavail.append(alpha_idx)
 
             # beta-5: β-5 bond + O-α ring closure
             elif lname == "beta-5":

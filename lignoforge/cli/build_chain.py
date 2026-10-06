@@ -55,9 +55,23 @@ Output
     --output DIR        Output directory (default: chain_output/)
     --name NAME         Base name for output files (default: chain)
     --format FMT        Comma-separated output formats:
-                        smiles, sdf, pdb, pdb-cg, json-atomistic, json-cg, all
+                        smiles, sdf, pdb, pdb-cg, json-atomistic, json-cg,
+                        gromacs, all
                         (default: smiles,pdb)
     --no-3d             Skip 3-D coordinates (fast; SMILES and graph-only JSON)
+
+MD workflows (formats ``gromacs``, ``md``, ``cg``)
+--------------------------------------------------
+    gromacs             OPLS-AA .top/.gro + em.mdp per chain
+    md                  full atomistic workflow: box, solvation, EM, NVT, NPT, run
+    cg                  1-bead-per-monomer CG system (all chains of the run)
+    --md-temperature T  Temperature in K for md/cg (default 300)
+    --solvent S         tip3p | spce | none for md (default tip3p)
+    --prod-ns X         Atomistic production length in ns (default 10)
+    --cg-copies N       Copies of each chain in the CG box (default 1)
+    --cg-density D      CG target mass density, g/cm3 (default 0.3)
+    --cg-run-ns X       CG run length in ns (default 100)
+    --cg-params FILE    CG parameter JSON (e.g. from lignoforge-cg-fit)
     --no-H              Strip explicit hydrogens from 3-D output
     --max-iter N        Max MMFF/UFF optimisation iterations (default: 300)
     --verbose           Print per-step chain-growth progress
@@ -83,6 +97,7 @@ import json
 import os
 import sys
 import traceback
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -170,8 +185,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # ── Branching ────────────────────────────────────────────────────────────────
     bg = p.add_argument_group("Branching / topology")
-    bg.add_argument("--branching", metavar="F", type=_fraction, default=None,
-                    help="Branching propensity per MC step (0=linear).")
+    bg.add_argument("--branching", metavar="F", type=_fraction, default=0.0,
+                    help="Branching propensity per MC step "
+                         "(0 = strictly linear, default).")
 
     # ── Simulation ──────────────────────────────────────────────────────────────
     simg = p.add_argument_group("Simulation")
@@ -197,7 +213,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Comma-separated list of output formats (default: smiles,pdb). "
             "Available: smiles, population-smiles, sdf, pdb, pdb-cg, "
-            "json-atomistic, json-cg, html, all."
+            "json-atomistic, json-cg, html, gromacs, md, cg, all."
         ),
     )
     og.add_argument("--no-3d",         action="store_true",
@@ -217,6 +233,23 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="Write population_statistics.json with ensemble-level stats.")
     og.add_argument("--verbose",       action="store_true",
                     help="Print per-step chain-growth progress.")
+
+    mg = p.add_argument_group("MD workflows (formats: md, cg)")
+    mg.add_argument("--md-temperature", metavar="T", type=_positive_float,
+                    default=300.0, dest="md_temperature",
+                    help="Temperature in K (default: 300).")
+    mg.add_argument("--solvent", choices=["tip3p", "spce", "none"], default="tip3p",
+                    help="Solvent for the atomistic workflow (default: tip3p).")
+    mg.add_argument("--prod-ns", metavar="X", type=_positive_float, default=10.0,
+                    dest="prod_ns", help="Atomistic production length, ns (default: 10).")
+    mg.add_argument("--cg-copies", metavar="N", type=_positive_int, default=1,
+                    dest="cg_copies", help="Copies of each chain in the CG box.")
+    mg.add_argument("--cg-density", metavar="D", type=_positive_float, default=0.3,
+                    dest="cg_density", help="CG target density, g/cm3 (default: 0.3).")
+    mg.add_argument("--cg-run-ns", metavar="X", type=_positive_float, default=100.0,
+                    dest="cg_run_ns", help="CG run length, ns (default: 100).")
+    mg.add_argument("--cg-params", metavar="FILE", default=None, dest="cg_params",
+                    help="CG parameter JSON (default: provisional defaults).")
 
     return p
 
@@ -298,7 +331,8 @@ def _grow_chain_exact(
 
     Uses ``Polymer.add_random_monomer`` in a direct loop so the final chain
     always contains exactly *n* monomers (or fewer if no compatible linkage
-    can be found after 20 attempts for a given step).
+    can be found after 20 attempts for a given step, in which case a
+    ``RuntimeWarning`` is emitted).
     """
     from lignoforge.core.monomer import Monomer
     from lignoforge.core.polymer import Polymer
@@ -317,15 +351,20 @@ def _grow_chain_exact(
     m_init  = Monomer(mtype)
     polymer = Polymer(m_init)
 
-    # Grow n-1 additional monomers
-    for _ in range(n - 1):
-        # Determine branching state for this step
-        if branching is not None and branching > 0.0:
-            b_state = generate_random_branching_state(branching, rstate)
-        else:
-            b_state = None
-
+    # Grow n-1 additional monomers.  A branching propensity of 0 (or None)
+    # means strictly linear growth: only terminal monomers may accept a new
+    # unit.  (Passing ``None`` to ``add_random_monomer`` would instead allow
+    # *any* monomer with a free site to branch.)
+    p_branch = branching or 0.0
+    for step in range(n - 1):
         for _attempt in range(20):
+            # Re-drawn on every attempt so a branch request that cannot be
+            # satisfied (no interior monomer with a free site) does not
+            # exhaust the attempts.
+            if p_branch > 0.0:
+                b_state = generate_random_branching_state(p_branch, rstate)
+            else:
+                b_state = False
             if polymer.add_random_monomer(
                 monomer_distribution=m_dist,
                 linkage_distribution=l_dist,
@@ -333,6 +372,14 @@ def _grow_chain_exact(
                 random_state=rstate,
             ):
                 break
+        else:
+            warnings.warn(
+                f"Chain growth stalled at {step + 1} of {n} monomers: no "
+                f"compatible linkage found after 20 attempts "
+                f"(check linkage/monomer fractions, e.g. --beta-1 is disabled).",
+                RuntimeWarning,
+            )
+            break
 
     return polymer
 
@@ -341,7 +388,8 @@ def _grow_chain_exact(
 
 _ALL_FORMATS = {
     "smiles", "population-smiles", "sdf",
-    "pdb", "pdb-cg", "json-atomistic", "json-cg", "html",
+    "pdb", "pdb-cg", "json-atomistic", "json-cg", "html", "gromacs",
+    "md", "cg",
 }
 
 
@@ -369,6 +417,7 @@ def _export_population(
     max_iter:          int,
     n_workers:         Optional[int],
     verbose:           bool,
+    md_options:        Optional[dict] = None,
 ) -> dict:
     """Export an entire polymer population.  Returns {fmt: path | [paths]}."""
     from lignoforge.core.utils import graph_to_smile, graph_to_mol
@@ -402,7 +451,8 @@ def _export_population(
         print(f"    [population-smiles] {path}")
 
     # ── Formats that require 3-D topology ─────────────────────────────────────
-    needs_3d = formats & {"pdb", "pdb-cg", "json-atomistic", "json-cg", "html"}
+    needs_3d = formats & {"pdb", "pdb-cg", "json-atomistic", "json-cg", "html",
+                          "gromacs", "md", "cg"}
     if needs_3d:
         if not generate_3d:
             print("    [warn] 3-D formats requested but --no-3d was set; skipping.")
@@ -428,6 +478,51 @@ def _export_population(
                 )
                 written["pdb"] = paths
                 print(f"    [pdb] {pdb_dir}/  ({len(paths)} file(s))")
+
+            # GROMACS inputs (OPLS-AA topology built from the bond graph)
+            if "gromacs" in formats:
+                from lignoforge.forcefield import write_gromacs_system
+                gmx_dirs = []
+                for i, chain in enumerate(atomistic_pop["chains"]):
+                    gdir = os.path.join(output_dir, "gromacs", f"{base_name}_{i}")
+                    write_gromacs_system(chain, gdir, name=f"{base_name}_{i}")
+                    gmx_dirs.append(gdir)
+                written["gromacs"] = gmx_dirs
+                print(f"    [gromacs] {os.path.join(output_dir, 'gromacs')}/  "
+                      f"({len(gmx_dirs)} system(s): .top .gro em.mdp)")
+
+            md_options = md_options or {}
+            if "md" in formats:
+                from lignoforge.md import write_atomistic_workflow
+                md_dirs = []
+                for i, chain in enumerate(atomistic_pop["chains"]):
+                    mdir = os.path.join(output_dir, "md", f"{base_name}_{i}")
+                    write_atomistic_workflow(
+                        chain, mdir, name=f"{base_name}_{i}",
+                        temperature=md_options.get("temperature", 300.0),
+                        solvent=md_options.get("solvent", "tip3p"),
+                        prod_ns=md_options.get("prod_ns", 10.0),
+                    )
+                    md_dirs.append(mdir)
+                written["md"] = md_dirs
+                print(f"    [md] {os.path.join(output_dir, 'md')}/  "
+                      f"({len(md_dirs)} workflow(s); run ./run.sh in each)")
+
+            if "cg" in formats:
+                from lignoforge.cg import CGParameters, write_cg_system
+                cg_par = (CGParameters.load(md_options["cg_params"])
+                          if md_options.get("cg_params") else None)
+                cdir = os.path.join(output_dir, "cg_md")
+                write_cg_system(
+                    atomistic_pop["chains"], cdir, name=base_name,
+                    parameters=cg_par,
+                    copies=md_options.get("cg_copies", 1),
+                    density_g_cm3=md_options.get("cg_density", 0.3),
+                    temperature=md_options.get("temperature", 300.0),
+                    run_ns=md_options.get("cg_run_ns", 100.0),
+                )
+                written["cg"] = cdir
+                print(f"    [cg] {cdir}/  (run ./run.sh)")
 
             # Atomistic topology JSON (population-level)
             if "json-atomistic" in formats:
@@ -638,6 +733,12 @@ def main(argv: Optional[list] = None) -> int:
             max_iter=args.max_iter,
             n_workers=args.n_workers,
             verbose=args.verbose,
+            md_options={
+                "temperature": args.md_temperature, "solvent": args.solvent,
+                "prod_ns": args.prod_ns, "cg_copies": args.cg_copies,
+                "cg_density": args.cg_density, "cg_run_ns": args.cg_run_ns,
+                "cg_params": args.cg_params,
+            },
         )
     except Exception as e:
         print(f"    [error] Export failed: {e}", file=sys.stderr)

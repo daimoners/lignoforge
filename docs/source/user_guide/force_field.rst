@@ -16,6 +16,38 @@ structure generation to GROMACS topology.
 
 ----
 
+Recommended workflow: direct GROMACS topology
+---------------------------------------------
+
+.. code-block:: bash
+
+   lignoforge-chain --n-monomers 10 --format gromacs,pdb
+   cd chain_output/gromacs/chain_0
+   gmx grompp -f em.mdp -c chain_0.gro -p chain_0.top -o em.tpr
+   gmx mdrun -deffnm em
+
+``--format gromacs`` writes, per chain, ``<name>.top``, ``<name>.gro``,
+``em.mdp`` and ``<name>_topology_report.json`` (linkages, per-residue charge
+adjustments).  The topology is built from the bond graph by
+``lignoforge.forcefield``: OPLS-AA types come from atom names and linkage
+context, and angles, dihedrals, 1-4 pairs and aromatic impropers are derived
+from the graph, so linear, branched and ring-closed chains are all handled
+without ``pdb2gmx``.  The ``.top`` includes ``oplsaa.ff/forcefield.itp``, so
+GROMACS must find ``oplsaa.ff`` (system installation or ``GMXLIB``).
+
+Charges follow the OPLS-AA fragment values.  C–O–C bridges are neutral by
+construction; any residual per residue is spread uniformly over that
+residue's atoms, so the total charge is exactly zero.  Two torsions absent
+from OPLS-AA are added as analogues (``CA CA CM HC`` as in ethylbenzene,
+``CA CT CT CA`` as ``CA CT CT CT``).
+
+.. note::
+
+   The ``pdb2gmx`` / RTP workflow below is **legacy**.  It only links
+   residues *i* and *i+1* and is therefore incorrect for chains whose residue
+   numbering does not follow the connectivity, for branched chains and for
+   ring closures.
+
 Overview
 --------
 

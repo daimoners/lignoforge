@@ -46,6 +46,7 @@ setuptools.setup(
     entry_points={
         "console_scripts": [
             "lignoforge-chain = lignoforge.cli.build_chain:main",
+            "lignoforge-cg-fit = lignoforge.cli.cg_fit:main",
         ],
     },
     classifiers=[

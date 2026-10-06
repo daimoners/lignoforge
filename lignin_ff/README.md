@@ -4,6 +4,25 @@ This directory contains OPLS-AA force-field parameter files for all-atom
 molecular dynamics simulations of lignin with GROMACS, together with the
 Python tooling that assigns per-atom types to any PDB produced by LignoForge.
 
+> **Recommended route (v0.2.2+):** generate GROMACS inputs directly from the
+> chain graph with
+>
+> ```bash
+> lignoforge-chain --n-monomers 10 --format gromacs,pdb
+> gmx grompp -f chain_output/gromacs/chain_0/em.mdp \
+>            -c chain_output/gromacs/chain_0/chain_0.gro \
+>            -p chain_output/gromacs/chain_0/chain_0.top -o em.tpr
+> ```
+>
+> This uses `lignoforge.forcefield` (OPLS-AA typing, per-residue charge
+> neutralisation, angles/dihedrals/pairs/impropers derived from the bond graph)
+> and works for linear, branched and ring-closed (β-5, β-β) chains.  The
+> `pdb2gmx` + RTP workflow described below is **legacy**: it only connects
+> residues *i* and *i+1* (`+O4H` / `-CB`), so it is wrong for any chain whose
+> residue numbering does not follow the connectivity, for branched chains and
+> for ring closures; its RTP also omits the `all_dihedrals` column and so
+> generates only one dihedral per central bond.
+
 ---
 
 ## Directory Layout
