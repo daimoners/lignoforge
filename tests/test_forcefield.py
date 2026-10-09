@@ -122,10 +122,31 @@ def test_dimer_topology_is_complete_and_neutral(linkage, mtype):
     assert all(a.opls.startswith("opls_") for a in topo.atoms)
 
 
-def test_aromatic_impropers_one_per_ring_carbon():
+def test_planarity_impropers():
     p = _grow(4, [0, 1, 1], {"beta-O-4": 1, "5-5": 1}, 3)
     topo = build_chain_topology(_atomistic(p))
-    assert len(topo.impropers) == 6 * 4
+    macros = collections.Counter(m for *_, m in topo.impropers)
+    assert macros["improper_Z_CA_X_Y"] == 6 * 4          # one per ring carbon
+    n_vinyl = sum(1 for a in topo.atoms if a.opls == "opls_142")
+    assert macros["improper_Z_CM_X_Y"] == n_vinyl > 0     # one per sp2 vinyl C
+    idx = {a.index: a for a in topo.atoms}
+    for i, j, k, l, m in topo.impropers:                  # centre bonded to the 3 others
+        assert {i, j, l} <= {x for b in topo.bonds if k in b for x in b}
+
+
+def test_charge_adjustment_report_is_consistent():
+    p = _grow(6, [0.2, 0.4, 0.4], {"beta-O-4": 2, "4-O-5": 1, "beta-beta": 1}, 2)
+    topo = build_chain_topology(_atomistic(p))
+    adj = topo.charge_adjustments()
+    assert len(adj) == len(topo.atoms)
+    assert sum(r["delta"] for r in adj) == pytest.approx(-sum(
+        r["raw_net_charge"] for r in topo.charge_report), abs=1e-4)
+    for r in topo.charge_report:                          # per residue: Σδ = −raw net
+        d = sum(x["delta"] for x in adj if x["residue"] == r["residue"])
+        assert d == pytest.approx(-r["raw_net_charge"], abs=1e-4)
+    text = topo.charge_report_text()
+    assert "By OPLS type" in text and "Largest single-atom change" in text
+    assert {t["opls"] for t in topo.charge_adjustments_by_type()} == {a.opls for a in topo.atoms}
 
 
 def test_topology_independent_of_residue_numbering():
@@ -200,3 +221,11 @@ def test_grompp_accepts_generated_topology(tmp_path, seed, linkages, branching):
         cwd=tmp_path, capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr[-1500:]
+
+
+def test_beta_1_fraction_is_zeroed_with_warning(capsys):
+    from lignoforge.cli.build_chain import _apply_linkage_overrides, _build_parser
+    args = _build_parser().parse_args(["--beta-1", "0.5", "--beta-O-4", "0.5"])
+    lk = _apply_linkage_overrides([0.1] * 7, args)
+    assert lk[6] == 0.0 and sum(lk) == pytest.approx(1.0)
+    assert "beta-1" in capsys.readouterr().err

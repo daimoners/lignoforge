@@ -103,6 +103,8 @@ vdw-modifier = potential-shift
 pbc          = xyz
 gen-vel      = yes
 gen-temp     = {T}
+gen-seed     = {seed}
+ld-seed      = {seed}
 """
 
 
@@ -133,6 +135,7 @@ def write_cg_system(
     run_ns: float = 100.0,
     dt_ps: float = 0.01,
     cutoff_nm: float = 1.4,
+    seed: int = -1,
 ) -> Dict[str, str]:
     """
     Write a CG system: ``<name>.top``, one ``.gro`` per chain, ``em.mdp``,
@@ -172,7 +175,8 @@ def write_cg_system(
     nout = max(1, nsteps // 1000)
     paths["em"] = _write(os.path.join(output_dir, "em.mdp"), _EM.format(rc=cutoff_nm))
     paths["md"] = _write(os.path.join(output_dir, "md.mdp"), _SD.format(
-        dt=dt_ps, nsteps=nsteps, tau_t=1.0, T=temperature, nout=nout, rc=cutoff_nm))
+        dt=dt_ps, nsteps=nsteps, tau_t=1.0, T=temperature, nout=nout, rc=cutoff_nm,
+        seed=seed))
 
     if len(cgs) == 1 and copies == 1:
         build = f"cp {cgs[0].name}.gro system.gro\n"
@@ -200,6 +204,6 @@ def write_cg_system(
         "model": "monomer-bead CG (1 bead/monomer)", "chains": [c.name for c in cgs],
         "copies": copies, "box_nm": box, "density_g_cm3": density_g_cm3,
         "temperature_K": temperature, "run_ns": run_ns, "dt_ps": dt_ps,
-        "cutoff_nm": cutoff_nm, "parameters_provenance": p.provenance,
+        "cutoff_nm": cutoff_nm, "seed": seed, "parameters_provenance": p.provenance,
     }, indent=2))
     return paths

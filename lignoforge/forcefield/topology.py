@@ -33,7 +33,8 @@ from lignoforge.forcefield.opls import (
 __all__ = ["Atom", "ChainTopology", "build_chain_topology", "write_gromacs_system"]
 
 _RING_NAMES = ("C1", "C2", "C3", "C4", "C5", "C6")
-_IMPROPER_MACRO = "improper_Z_CA_X_Y"
+_IMPROPER_AROMATIC = "improper_Z_CA_X_Y"   # ring carbons
+_IMPROPER_ALKENE = "improper_Z_CM_X_Y"     # sp2 vinyl carbons (opls_142)
 _FF_INCLUDE = "oplsaa.ff/forcefield.itp"
 
 _EM_MDP = """\
@@ -60,8 +61,9 @@ class Atom:
     resid: int            # 1-based residue number
     resname: str
     opls: str
-    charge: float
+    charge: float         # final charge written to the topology
     xyz: Tuple[float, float, float]  # Å
+    raw_charge: float = 0.0  # fragment charge before neutralisation
 
 
 @dataclass
@@ -74,13 +76,105 @@ class ChainTopology:
     angles: List[Tuple[int, int, int]]
     dihedrals: List[Tuple[int, int, int, int]]
     pairs: List[Tuple[int, int]]
-    impropers: List[Tuple[int, int, int, int]]
+    impropers: List[Tuple[int, int, int, int, str]]   # (i, j, k, l, macro)
     linkages: List[dict] = field(default_factory=list)
     charge_report: List[dict] = field(default_factory=list)
 
     @property
     def net_charge(self) -> float:
         return round(sum(a.charge for a in self.atoms), 6)
+
+    def to_dict(self, include_terms: bool = False) -> dict:
+        """
+        JSON-serialisable view of the typed topology (used by the GUI/API).
+
+        Atoms carry type, final and raw charge and coordinates (Å).  With
+        ``include_terms`` the angle / dihedral / pair / improper lists are
+        added as well.
+        """
+        d = {
+            "name": self.name, "net_charge": self.net_charge,
+            "n_atoms": len(self.atoms), "n_bonds": len(self.bonds),
+            "n_angles": len(self.angles), "n_dihedrals": len(self.dihedrals),
+            "n_pairs": len(self.pairs), "n_impropers": len(self.impropers),
+            "atoms": [
+                {"index": a.index, "name": a.name, "element": a.element,
+                 "resid": a.resid, "resname": a.resname, "opls": a.opls,
+                 "charge": a.charge, "raw_charge": a.raw_charge,
+                 "x": a.xyz[0], "y": a.xyz[1], "z": a.xyz[2]}
+                for a in self.atoms
+            ],
+            "bonds": [list(b) for b in self.bonds],
+            "linkages": self.linkages, "residues": self.charge_report,
+        }
+        if include_terms:
+            d.update(angles=[list(t) for t in self.angles],
+                     dihedrals=[list(t) for t in self.dihedrals],
+                     pairs=[list(t) for t in self.pairs],
+                     impropers=[list(t) for t in self.impropers])
+        return d
+
+    # ── Charge renormalisation report ────────────────────────────────────────
+
+    def charge_adjustments(self) -> List[dict]:
+        """Per-atom record of the neutralisation: raw charge, final charge, shift."""
+        return [
+            {"residue": a.resid, "resname": a.resname, "atom_index": a.index,
+             "atom": a.name, "opls": a.opls, "raw_charge": a.raw_charge,
+             "charge": a.charge, "delta": round(a.charge - a.raw_charge, 6)}
+            for a in self.atoms
+        ]
+
+    def charge_adjustments_by_type(self) -> List[dict]:
+        """Shifts aggregated by OPLS type (count, mean, min, max)."""
+        groups: Dict[str, List[float]] = collections.defaultdict(list)
+        for rec in self.charge_adjustments():
+            groups[rec["opls"]].append(rec["delta"])
+        return [
+            {"opls": t, "n_atoms": len(v), "mean_delta": round(sum(v) / len(v), 5),
+             "min_delta": min(v), "max_delta": max(v)}
+            for t, v in sorted(groups.items())
+        ]
+
+    def charge_report_text(self) -> str:
+        """Human-readable summary of which charges were renormalised, and by how much."""
+        L = [f"Charge renormalisation report — {self.name}",
+             "Each residue's net charge is removed by shifting every atom of",
+             "that residue by the same amount (residual / n_atoms), then rounding",
+             "to 1e-4 e with the rounding leftover given to the least polar atoms.", "",
+             f"{'res':>4s} {'name':5s} {'atoms':>5s} {'raw net (e)':>12s} "
+             f"{'shift/atom (e)':>15s} {'max |Δ| (e)':>12s}   linkages"]
+        n_atoms = collections.Counter(a.resid for a in self.atoms)
+        for r in self.charge_report:
+            per = -r["raw_net_charge"] / n_atoms[r["residue"]]
+            L.append(f"{r['residue']:4d} {r['resname']:5s} {n_atoms[r['residue']]:5d} "
+                     f"{r['raw_net_charge']:+12.4f} {per:+15.5f} "
+                     f"{r['max_atom_shift']:12.5f}   {', '.join(r['linkages']) or '-'}")
+        L += ["", "By OPLS type (all residues):",
+              f"{'type':10s} {'atoms':>6s} {'mean Δ (e)':>12s} {'min Δ':>10s} {'max Δ':>10s}"]
+        for t in self.charge_adjustments_by_type():
+            L.append(f"{t['opls']:10s} {t['n_atoms']:6d} {t['mean_delta']:+12.5f} "
+                     f"{t['min_delta']:+10.5f} {t['max_delta']:+10.5f}")
+        worst = max(self.charge_adjustments(), key=lambda r: abs(r["delta"]))
+        L += ["", f"Largest single-atom change: {worst['delta']:+.5f} e on "
+                  f"{worst['atom']} (index {worst['atom_index']}, residue "
+                  f"{worst['residue']} {worst['resname']}, {worst['opls']}; "
+                  f"{worst['raw_charge']:+.4f} → {worst['charge']:+.4f})",
+              f"Chain net charge after renormalisation: {self.net_charge:+.4f} e"]
+        return "\n".join(L) + "\n"
+
+    def write_charge_report(self, output_dir: str) -> Dict[str, str]:
+        """Write ``<name>_charge_report.txt`` and ``<name>_charge_report.json``."""
+        txt = os.path.join(output_dir, f"{self.name}_charge_report.txt")
+        js = os.path.join(output_dir, f"{self.name}_charge_report.json")
+        _write(txt, self.charge_report_text())
+        _write(js, json.dumps({
+            "name": self.name, "net_charge": self.net_charge,
+            "residues": self.charge_report,
+            "by_type": self.charge_adjustments_by_type(),
+            "atoms": self.charge_adjustments(),
+        }, indent=1))
+        return {"charge_report_txt": txt, "charge_report_json": js}
 
     # ── Writers ───────────────────────────────────────────────────────────────
 
@@ -128,10 +222,10 @@ class ChainTopology:
         L += ["", "[ dihedrals ]", "; proper (Ryckaert-Bellemans)",
               ";  ai   aj   ak   al funct"]
         L += [f"{i:6d}{j:6d}{k:6d}{l:6d}     3" for i, j, k, l in self.dihedrals]
-        L += ["", "[ dihedrals ]", "; improper (aromatic planarity)",
+        L += ["", "[ dihedrals ]", "; improper (planarity of aromatic and vinyl carbons)",
               ";  ai   aj   ak   al funct  macro"]
-        L += [f"{i:6d}{j:6d}{k:6d}{l:6d}     1  {_IMPROPER_MACRO}"
-              for i, j, k, l in self.impropers]
+        L += [f"{i:6d}{j:6d}{k:6d}{l:6d}     1  {macro}"
+              for i, j, k, l, macro in self.impropers]
         for inc in extra_includes:
             L += ["", f'#include "{inc}"']
         L += ["", "[ system ]", self.name, "", "[ molecules ]",
@@ -287,6 +381,7 @@ def build_chain_topology(chain: dict, name: Optional[str] = None) -> ChainTopolo
                 resid=resid_of[m_id], resname=resname,
                 opls=typed[n][0], charge=charges[n],
                 xyz=(float(a["x"]), float(a["y"]), float(a["z"])),
+                raw_charge=typed[n][1],
             )
 
     adj: Dict[int, Set[int]] = {i: set() for i in atoms}
@@ -297,7 +392,7 @@ def build_chain_topology(chain: dict, name: Optional[str] = None) -> ChainTopolo
     angles, dihedrals, pairs = _derive_bonded_terms(adj, bond_list)
 
     # ── Aromatic impropers (graph-derived, valid for any substituent) ─────────
-    impropers: List[Tuple[int, int, int, int]] = []
+    impropers: List[Tuple[int, int, int, int, str]] = []
     ring_index: Dict[Tuple[int, str], int] = {
         (a.resid, a.name): a.index for a in atoms.values()
         if a.name in _RING_NAMES and a.element == "C"
@@ -312,7 +407,17 @@ def build_chain_topology(chain: dict, name: Optional[str] = None) -> ChainTopolo
                 f"Ring atom {cname} of residue {resid} has {len(subst)} "
                 f"non-ring neighbours (expected 1)"
             )
-        impropers.append((prev, nxt, centre, next(iter(subst))))
+        impropers.append((prev, nxt, centre, next(iter(subst)), _IMPROPER_AROMATIC))
+
+    # sp2 vinyl carbons (Cα=Cβ of end units): three neighbours, one planar centre
+    for idx in sorted(atoms):
+        if atoms[idx].opls == "opls_142":
+            nb = sorted(adj[idx])
+            if len(nb) != 3:
+                raise TypingError(
+                    f"Vinyl carbon {atoms[idx].name} of residue "
+                    f"{atoms[idx].resid} has {len(nb)} neighbours (expected 3)")
+            impropers.append((nb[0], nb[1], idx, nb[2], _IMPROPER_ALKENE))
 
     topo = ChainTopology(
         name=name,
@@ -335,7 +440,8 @@ def write_gromacs_system(
     Build and write a complete, ready-to-minimise GROMACS input set.
 
     Files written to *output_dir*: ``<name>.top``, ``<name>.gro``, ``em.mdp``
-    and ``<name>_topology_report.json``.  Run, e.g.::
+    and ``<name>_topology_report.json`` and the charge-renormalisation report
+    (``<name>_charge_report.txt/.json``).  Run, e.g.::
 
         gmx grompp -f em.mdp -c <name>.gro -p <name>.top -o em.tpr
     """
@@ -355,4 +461,5 @@ def write_gromacs_system(
             "linkages": topo.linkages, "residues": topo.charge_report,
         }, fh, indent=2)
     paths["report"] = rep
+    paths.update(topo.write_charge_report(output_dir))
     return paths

@@ -36,9 +36,45 @@ New features
   Boltzmann inversion (``lignoforge-cg-fit``).  Shipped defaults are
   provisional.
 
+Removed
+~~~~~~~
+
+* ``lignin_ff/`` (``lignin.rtp``, ``residuetypes_lignin.dat``,
+  ``tools/assign_chain_types.py``, ``tools/test_assign.py`` and notes): the
+  ``pdb2gmx`` / RTP route linked only residues *i* and *i+1* and is replaced
+  by ``lignoforge.forcefield``.  The files remain in the git history (v0.2.1).
+
+* **Project API** (``lignoforge.api``): UI-independent service layer
+  (``Project``) with on-disk, versioned records for chains, local GROMACS runs,
+  analyses and CG parameter sets; shared by CLI, notebooks and the web
+  interface.  See :ref:`project_api`.
+* **Trajectory analysis** (``lignoforge.analysis``, MDAnalysis): radius of
+  gyration, end-to-end distance, RMSD, density, RDF, inter-monomer contact
+  map and energy terms, for atomistic and CG runs.
+* **Web interface** (React + TypeScript, ``frontend/``; bundle shipped in
+  ``lignoforge/web/static``): project management, chain builder with live
+  specification preview, 3-D viewer (3Dmol.js; colour by monomer / element /
+  OPLS type / charge / residue, atomistic and CG views), force-field and
+  charge-report browsers, linkage graph, local simulation launcher with live
+  log and progress, analysis charts (time series, RDF, contact map) with
+  export, light/dark themes, environment and model-validation status page.
+  Covered by Playwright end-to-end tests against the real backend.
+* **Web backend** (``lignoforge.web``, FastAPI) and the ``lignoforge``
+  command (``chain``, ``cg-fit``, ``gui``, ``check``).  Optional extras:
+  ``pip install 'lignoforge[gui]'`` and ``'lignoforge[analysis]'``.
+
 Bug fixes
 ~~~~~~~~~
 
+* MD runs are now reproducible: the velocity seed is explicit and recorded.
+* ``nstenergy`` / ``nstlog`` are always multiples of ``nstcalcenergy`` (GROMACS
+  refused runs with output intervals such as 0.5 ps).
+* ``--beta-1`` was accepted but the bond is never built; its fraction is now
+  set to 0 with a warning, so the reported linkage distribution matches the
+  chain.
+* sp\ :sup:`2` vinyl carbons now get ``improper_Z_CM_X_Y`` planarity terms.
+* Charge renormalisation is reported per atom and per OPLS type
+  (``*_charge_report.txt/.json``).
 * ``--branching 0`` (and the default) now yields strictly linear chains.
   Previously 0 was treated as "unrestricted" in the exact-size growth path,
   so any monomer with a free C4/C5/Cβ site could branch.

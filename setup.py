@@ -29,7 +29,7 @@ setuptools.setup(
         "Source": "https://github.com/daimoners/lignoforge",
     },
     packages=setuptools.find_packages(),
-    package_data={'': ['*.xlsx', '*.json']},
+    package_data={'': ['*.xlsx', '*.json'], 'lignoforge.web': ['static/*', 'static/assets/*']},
     include_package_data=True,
     python_requires=">=3.7",
     install_requires=[
@@ -43,10 +43,16 @@ setuptools.setup(
         "networkx>=2.5",
         "pysmiles>=1.0.1",
         "rdkit-pypi>=2021.9.2.1"],
+    extras_require={
+        "gui": ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2.0"],
+        "analysis": ["MDAnalysis>=2.6"],
+        "dev": ["pytest>=6.2.3", "httpx>=0.25"],
+    },
     entry_points={
         "console_scripts": [
             "lignoforge-chain = lignoforge.cli.build_chain:main",
             "lignoforge-cg-fit = lignoforge.cli.cg_fit:main",
+            "lignoforge = lignoforge.cli.main:main",
         ],
     },
     classifiers=[

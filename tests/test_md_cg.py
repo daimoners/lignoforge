@@ -165,3 +165,14 @@ def test_angle_fit_is_constrained_to_physical_domain():
     t0, k = _harmonic_from_histogram(s, np.sin, kT, 0.2, np.pi, bounds=(0.0, np.pi))
     assert np.degrees(t0) == pytest.approx(180.0)
     assert k > 0
+
+
+@pytest.mark.parametrize("out_ps", [0.1, 0.5, 1.0, 7.0, 10.0])
+def test_output_intervals_are_multiples_of_nstcalcenergy(out_ps):
+    """GROMACS refuses nstenergy that is not a multiple of nstcalcenergy."""
+    txt = mdp.prod_mdp(100.0, 300.0, out_ps=out_ps)
+    val = {l.split("=")[0].strip(): int(l.split("=")[1])
+           for l in txt.splitlines()
+           if l.split("=")[0].strip() in ("nstcalcenergy", "nstenergy", "nstlog")}
+    assert val["nstenergy"] % val["nstcalcenergy"] == 0
+    assert val["nstlog"] % val["nstcalcenergy"] == 0

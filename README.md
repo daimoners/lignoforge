@@ -448,78 +448,40 @@ lignoforge/
 ├── priors/             # LigninPriorEstimator + literature data tables
 ├── io/                 # InputSchemaValidator, LigninExporter, lignin_info_schema.json
 ├── structure/          # MolecularStructureGenerator, PDBStructureWriter
-└── cli/                # Command-line entry points (lignoforge-chain)
+├── forcefield/         # OPLS-AA typing, charge neutralisation, GROMACS topology from the bond graph
+├── md/                 # Atomistic GROMACS workflow (EM/NVT/NPT/production)
+├── cg/                 # One-bead-per-monomer CG model, Boltzmann inversion
+└── cli/                # lignoforge-chain, lignoforge-cg-fit
 
 examples/
 ├── demo_run.py                  # End-to-end demo script (population pipeline)
 └── lignin_input_example.json    # Minimal hardwood kraft input example
 
-lignin_ff/                       # OPLS-AA force-field files for GROMACS
-├── lignin.rtp                   # GROMACS residue topology (9 residue definitions)
-├── residuetypes_lignin.dat      # pdb2gmx residuetype entries
-├── notes/
-│   └── atom_type_assignment.md  # per-atom type justification and charge accounting
-└── tools/
-    ├── assign_chain_types.py    # assigns OPLS-AA types to a LignoForge PDB
-    └── test_assign.py           # validation tests
+tools/
+└── validate_pipeline.py         # end-to-end validation (structure → OPLS-AA → GROMACS → CG)
+
+tests/                           # pytest suite (topology, charges, MD/CG workflows)
 
 docs/                   # Sphinx documentation source (Diátaxis structure)
 ```
 
 ---
 
-## Force-Field Parameters (GROMACS / OPLS-AA)
+## Force Field and Simulation (GROMACS / OPLS-AA)
 
-LignoForge ships OPLS-AA force-field parameters for all-atom MD simulations
-with GROMACS in the `lignin_ff/` directory.
-
-### Residue definitions
-
-Nine residue topologies are defined in `lignin_ff/lignin.rtp`:
-
-| Group | Names | Description |
-|-------|-------|-------------|
-| β-O-4 chain units | `GYU`, `HPU`, `SYU` | Internal polymer residues; sp3 side chain; two inter-residue bonds via O4H↔CB |
-| Isolated monolignols | `GYM`, `HPM`, `SYM` | Free coniferyl / p-coumaryl / sinapyl alcohol; vinyl side chain; free phenol |
-| Neutral saturated refs | `GNM`, `HNM`, `SNM` | Dihydro- analogues for parametrization checks |
-
-All residues carry **net charge 0.000 e** (verified per charge group).
-
-### Automatic type assignment
-
-The script `lignin_ff/tools/assign_chain_types.py` reads any LignoForge PDB,
-detects inter-residue bonds, and writes a per-chain custom RTP with correct
-OPLS-AA types at all linkage sites:
-
-```python
-from lignoforge.core.monomer import Monomer
-from lignoforge.core.polymer import Polymer
-from lignoforge.structure.pdb import PDBStructureWriter
-import subprocess, sys
-
-# 1. Generate PDB with LignoForge
-m = Monomer("G", monomer_index=0); m.create()
-p = Polymer(m, verbose=False)
-p.add_specific_monomer("G", "beta-O-4")
-p.add_specific_monomer("G", "beta-O-4")
-PDBStructureWriter().write_polymer_pdb(p, "chain.pdb", optimize_3d=True)
-
-# 2. Assign OPLS-AA types → chain_custom.rtp + chain_renamed.pdb
-subprocess.run([sys.executable,
-    "lignin_ff/tools/assign_chain_types.py", "chain.pdb"], check=True)
-
-# 3. Run GROMACS pdb2gmx
-# gmx pdb2gmx -f chain_renamed.pdb -ff ./oplsaa -water tip3p \
-#             -o processed.gro -p topol.top -rtpres chain_custom.rtp
-```
-
-Or directly from the command line:
+OPLS-AA topologies are generated directly from the bond graph, with no
+`pdb2gmx` step, for linear, branched and ring-closed chains:
 
 ```bash
-python lignin_ff/tools/assign_chain_types.py chain.pdb
+lignoforge-chain --n-monomers 10 --format gromacs      # .top .gro em.mdp + charge report
+lignoforge-chain --n-monomers 10 --format md           # full atomistic workflow (run.sh)
+lignoforge-chain --n-monomers 10 --n-chains 4 --format cg   # coarse-grained system
 ```
 
-See `lignin_ff/README.md` for the full GROMACS workflow.
+Every run writes a charge-renormalisation report listing which charges were
+shifted, on which atoms and OPLS types, and by how much. See the
+documentation pages *Force-Field Setup* and *Simulation Workflows*, and
+validate an installation with `python tools/validate_pipeline.py`.
 
 ---
 

@@ -71,6 +71,8 @@ def write_atomistic_workflow(
     nvt_ps: float = 100.0,
     npt_ps: float = 200.0,
     prod_ns: float = 10.0,
+    traj_ps: float = 10.0,
+    seed: int = -1,
 ) -> Dict[str, str]:
     """
     Write the full atomistic workflow for one chain topology dict.
@@ -94,14 +96,15 @@ def write_atomistic_workflow(
         "gro": topo.write_gro(os.path.join(output_dir, f"{name}.gro")),
         "em": _write(os.path.join(output_dir, "em.mdp"), mdp.em_mdp()),
         "nvt": _write(os.path.join(output_dir, "nvt.mdp"),
-                      mdp.nvt_mdp(nvt_ps, temperature)),
+                      mdp.nvt_mdp(nvt_ps, temperature, seed)),
         "prod": _write(os.path.join(output_dir, "prod.mdp"),
                        mdp.prod_mdp(prod_ns * 1000.0, temperature,
-                                    npt=solvent != "none")),
+                                    npt=solvent != "none", out_ps=traj_ps)),
     }
     if solvent != "none":
         paths["npt"] = _write(os.path.join(output_dir, "npt.mdp"),
                               mdp.npt_mdp(npt_ps, temperature))
+    paths.update(topo.write_charge_report(output_dir))
     run = _write(os.path.join(output_dir, "run.sh"),
                  _run_script(name, solvent, box_distance_nm))
     os.chmod(run, os.stat(run).st_mode | stat.S_IXUSR)
@@ -112,7 +115,7 @@ def write_atomistic_workflow(
             "name": name, "forcefield": "OPLS-AA", "solvent": solvent,
             "temperature_K": temperature, "box_distance_nm": box_distance_nm,
             "nvt_ps": nvt_ps, "npt_ps": npt_ps if solvent != "none" else None,
-            "prod_ns": prod_ns, "net_charge": topo.net_charge,
+            "prod_ns": prod_ns, "seed": seed, "net_charge": topo.net_charge,
             "n_atoms": len(topo.atoms), "linkages": topo.linkages,
             "residues": topo.charge_report,
         }, indent=2),

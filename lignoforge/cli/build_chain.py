@@ -36,7 +36,7 @@ Linkage distribution
     --5-5 F             5-5 fraction
     --beta-5 F          beta-5 fraction
     --beta-beta F       beta-beta fraction
-    --beta-1 F          beta-1 fraction
+    --beta-1 F          beta-1 fraction (currently unsupported: forced to 0)
     (fractions are re-normalised automatically)
 
 Branching
@@ -306,8 +306,24 @@ def _apply_linkage_overrides(base: list, args: argparse.Namespace) -> list:
         if val is not None:
             v[idx] = val
     arr = np.array(v, dtype=float)
+
+    # β-1 is disabled in the graph builder (ENABLE_BETA_1_LINKAGE): the bond is
+    # never formed, so a non-zero fraction would silently be ignored and the
+    # reported linkage distribution would not match the chain that is built.
+    from lignoforge.core.polymer import ENABLE_BETA_1_LINKAGE
+    if not ENABLE_BETA_1_LINKAGE and arr[6] > 0:
+        if args.lk_beta_1:
+            print("  [warn] beta-1 linkage is not supported by the structure "
+                  "builder; its fraction is set to 0 and the others "
+                  "renormalised.", file=sys.stderr)
+        arr[6] = 0.0
+
     total = arr.sum()
-    return (arr / total if total > 0 else np.ones(len(arr)) / len(arr)).tolist()
+    if total <= 0:
+        arr = np.ones(len(arr))
+        arr[6] = 0.0 if not ENABLE_BETA_1_LINKAGE else 1.0
+        total = arr.sum()
+    return (arr / total).tolist()
 
 
 # ── Chain growth ───────────────────────────────────────────────────────────────
@@ -320,68 +336,10 @@ def _grow_chain(trajectory_kwargs: dict, seed: int, i_max: int) -> object:
     return polymer
 
 
-def _grow_chain_exact(
-    n: int,
-    monomer_dist: list,
-    linkage_dist: list,
-    seed: int,
-    branching: Optional[float],
-) -> object:
-    """Grow a chain of exactly *n* monomers, bypassing the Trajectory engine.
-
-    Uses ``Polymer.add_random_monomer`` in a direct loop so the final chain
-    always contains exactly *n* monomers (or fewer if no compatible linkage
-    can be found after 20 attempts for a given step, in which case a
-    ``RuntimeWarning`` is emitted).
-    """
-    from lignoforge.core.monomer import Monomer
-    from lignoforge.core.polymer import Polymer
-    from lignoforge.core.utils import (
-        set_random_state,
-        generate_random_monomer,
-        generate_random_branching_state,
-    )
-
-    rstate   = set_random_state(seed)
-    m_dist   = np.asarray(monomer_dist)
-    l_dist   = np.asarray(linkage_dist)
-
-    # Initialise with the first monomer
-    mtype   = generate_random_monomer(m_dist, rstate)
-    m_init  = Monomer(mtype)
-    polymer = Polymer(m_init)
-
-    # Grow n-1 additional monomers.  A branching propensity of 0 (or None)
-    # means strictly linear growth: only terminal monomers may accept a new
-    # unit.  (Passing ``None`` to ``add_random_monomer`` would instead allow
-    # *any* monomer with a free site to branch.)
-    p_branch = branching or 0.0
-    for step in range(n - 1):
-        for _attempt in range(20):
-            # Re-drawn on every attempt so a branch request that cannot be
-            # satisfied (no interior monomer with a free site) does not
-            # exhaust the attempts.
-            if p_branch > 0.0:
-                b_state = generate_random_branching_state(p_branch, rstate)
-            else:
-                b_state = False
-            if polymer.add_random_monomer(
-                monomer_distribution=m_dist,
-                linkage_distribution=l_dist,
-                branching_state=b_state,
-                random_state=rstate,
-            ):
-                break
-        else:
-            warnings.warn(
-                f"Chain growth stalled at {step + 1} of {n} monomers: no "
-                f"compatible linkage found after 20 attempts "
-                f"(check linkage/monomer fractions, e.g. --beta-1 is disabled).",
-                RuntimeWarning,
-            )
-            break
-
-    return polymer
+def _grow_chain_exact(n, monomer_dist, linkage_dist, seed, branching):
+    """Grow a chain of exactly *n* monomers (see :func:`lignoforge.core.builder.grow_chain_exact`)."""
+    from lignoforge.core.builder import grow_chain_exact
+    return grow_chain_exact(n, monomer_dist, linkage_dist, seed, branching, verbose=True)
 
 
 # ── Format parsing ─────────────────────────────────────────────────────────────
@@ -404,6 +362,19 @@ def _parse_formats(fmt_str: str) -> set:
 
 
 # ── Population export ──────────────────────────────────────────────────────────
+
+def _print_charge_summary(paths: dict, label: str) -> None:
+    """One-line summary of the charge renormalisation of a written topology."""
+    rep = paths.get("charge_report_json")
+    if not rep:
+        return
+    with open(rep) as fh:
+        atoms = json.load(fh)["atoms"]
+    worst = max(atoms, key=lambda a: abs(a["delta"]))
+    print(f"    [charge] {label}: max |Δq| = {abs(worst['delta']):.4f} e "
+          f"({worst['atom']}, res {worst['residue']}); details: "
+          f"{os.path.basename(paths['charge_report_txt'])}")
+
 
 def _export_population(
     polymers:          list,
@@ -485,7 +456,8 @@ def _export_population(
                 gmx_dirs = []
                 for i, chain in enumerate(atomistic_pop["chains"]):
                     gdir = os.path.join(output_dir, "gromacs", f"{base_name}_{i}")
-                    write_gromacs_system(chain, gdir, name=f"{base_name}_{i}")
+                    gp = write_gromacs_system(chain, gdir, name=f"{base_name}_{i}")
+                    _print_charge_summary(gp, f"{base_name}_{i}")
                     gmx_dirs.append(gdir)
                 written["gromacs"] = gmx_dirs
                 print(f"    [gromacs] {os.path.join(output_dir, 'gromacs')}/  "
@@ -497,12 +469,13 @@ def _export_population(
                 md_dirs = []
                 for i, chain in enumerate(atomistic_pop["chains"]):
                     mdir = os.path.join(output_dir, "md", f"{base_name}_{i}")
-                    write_atomistic_workflow(
+                    mp = write_atomistic_workflow(
                         chain, mdir, name=f"{base_name}_{i}",
                         temperature=md_options.get("temperature", 300.0),
                         solvent=md_options.get("solvent", "tip3p"),
                         prod_ns=md_options.get("prod_ns", 10.0),
                     )
+                    _print_charge_summary(mp, f"{base_name}_{i}")
                     md_dirs.append(mdir)
                 written["md"] = md_dirs
                 print(f"    [md] {os.path.join(output_dir, 'md')}/  "

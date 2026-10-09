@@ -15,3 +15,4 @@ Task-oriented guides for common LignoForge workflows.
    output_formats
    force_field
    md_workflows
+   project_api

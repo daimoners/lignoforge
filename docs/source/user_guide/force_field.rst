@@ -4,11 +4,11 @@
 Force-Field Setup (OPLS-AA / GROMACS)
 =======================================
 
-LignoForge ships OPLS-AA force-field parameter files in ``lignin_ff/`` that
-enable all-atom molecular dynamics simulations of lignin polymer chains with
-**GROMACS**.  This page describes the residue definitions, explains how to
-assign per-atom types to any LignoForge PDB, and shows the full workflow from
-structure generation to GROMACS topology.
+LignoForge builds an OPLS-AA topology for any generated chain directly from
+its bond graph (package ``lignoforge.forcefield``).  There is no ``pdb2gmx``
+step and no residue-template file: atom types, charges, angles, dihedrals,
+1-4 pairs and impropers are all derived from the graph, so linear, branched
+and ring-closed (β-5, β-β) chains are handled identically.
 
 .. contents:: On this page
    :depth: 2
@@ -16,8 +16,8 @@ structure generation to GROMACS topology.
 
 ----
 
-Recommended workflow: direct GROMACS topology
----------------------------------------------
+Quick start
+-----------
 
 .. code-block:: bash
 
@@ -26,283 +26,129 @@ Recommended workflow: direct GROMACS topology
    gmx grompp -f em.mdp -c chain_0.gro -p chain_0.top -o em.tpr
    gmx mdrun -deffnm em
 
-``--format gromacs`` writes, per chain, ``<name>.top``, ``<name>.gro``,
-``em.mdp`` and ``<name>_topology_report.json`` (linkages, per-residue charge
-adjustments).  The topology is built from the bond graph by
-``lignoforge.forcefield``: OPLS-AA types come from atom names and linkage
-context, and angles, dihedrals, 1-4 pairs and aromatic impropers are derived
-from the graph, so linear, branched and ring-closed chains are all handled
-without ``pdb2gmx``.  The ``.top`` includes ``oplsaa.ff/forcefield.itp``, so
-GROMACS must find ``oplsaa.ff`` (system installation or ``GMXLIB``).
-
-Charges follow the OPLS-AA fragment values.  C–O–C bridges are neutral by
-construction; any residual per residue is spread uniformly over that
-residue's atoms, so the total charge is exactly zero.  Two torsions absent
-from OPLS-AA are added as analogues (``CA CA CM HC`` as in ethylbenzene,
-``CA CT CT CA`` as ``CA CT CT CT``).
-
-.. note::
-
-   The ``pdb2gmx`` / RTP workflow below is **legacy**.  It only links
-   residues *i* and *i+1* and is therefore incorrect for chains whose residue
-   numbering does not follow the connectivity, for branched chains and for
-   ring closures.
-
-Overview
---------
-
-The ``lignin_ff/`` directory contains:
-
-.. code-block:: text
-
-   lignin_ff/
-   ├── lignin.rtp                   GROMACS residue topology (9 residues)
-   ├── residuetypes_lignin.dat      pdb2gmx residuetype entries
-   ├── notes/
-   │   └── atom_type_assignment.md  Per-atom type justification
-   └── tools/
-       ├── assign_chain_types.py    Automatic type-assignment script
-       └── test_assign.py           Validation tests
-
-All nine residues carry **net charge = 0.000 e** (verified per OPLS-AA
-charge group; see :ref:`charge-groups`).
-
-----
-
-Residue Definitions
--------------------
-
-Three categories of residues are defined in ``lignin.rtp``:
-
-β-O-4 internal chain units
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-These represent interior monomers in a β-O-4 linked polymer chain.  The
-side chain is saturated (sp³).  Each unit has **two inter-residue bonds** in
-``[ bonds ]`` that encode the β-O-4 ether linkage:
-
-.. code-block:: text
-
-   O4H  -CB     ; aryl ether O (this unit) → Cβ of previous residue
-   CB   +O4H    ; Cβ (this unit) → aryl ether O of next residue
+Files written per chain:
 
 .. list-table::
-   :header-rows: 1
-   :widths: 12 20 68
-
-   * - Name
-     - Monomer type
-     - Description
-   * - ``GYU``
-     - G (guaiacyl)
-     - –OCH₃ at C3; sp³ α-OH at Cα; β-O-4 ether at Cβ
-   * - ``HPU``
-     - H (*p*-hydroxyphenyl)
-     - No OMe substituents; sp³ α-OH at Cα; β-O-4 ether at Cβ
-   * - ``SYU``
-     - S (syringyl)
-     - –OCH₃ at C3 **and** C5; sp³ α-OH at Cα; β-O-4 ether at Cβ
-
-Isolated free monolignols
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Free monolignol model compounds with a vinyl (sp² E-configured) side chain
-and a free phenol –OH at C4.  No inter-residue bonds.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 12 35 20 15
-
-   * - Name
-     - Compound
-     - Formula
-     - MW (g/mol)
-   * - ``GYM``
-     - coniferyl alcohol
-     - C₁₀H₁₂O₃
-     - 180.20
-   * - ``HPM``
-     - *p*-coumaryl alcohol
-     - C₉H₁₀O₂
-     - 150.17
-   * - ``SYM``
-     - sinapyl alcohol
-     - C₁₁H₁₄O₄
-     - 210.23
-
-Neutral saturated references
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Dihydro- analogues used during parametrisation verification and for MD of
-non-polymerised units.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 12 45
-
-   * - Name
-     - Compound
-   * - ``GNM``
-     - dihydroconiferyl alcohol (G)
-   * - ``HNM``
-     - dihydro-*p*-coumaryl alcohol (H)
-   * - ``SNM``
-     - dihydrosinapyl alcohol (S)
-
-----
-
-Atom-Name Conventions
----------------------
-
-LignoForge generates PDB files that use the atom names expected by
-``lignin.rtp``.  The table below lists all expected names:
-
-.. list-table::
-   :header-rows: 1
    :widths: 35 65
 
-   * - Position
-     - Atom names
-   * - Aromatic ring
-     - ``C1 C2 H2 C3 C4 C5 C6`` (plus heteroatoms at substituted positions)
-   * - Free phenol (monolignols only)
-     - ``O4H HO4``
-   * - OMe at C3 (G, S types)
-     - ``OM3 CM3 HM31 HM32 HM33``
-   * - OMe at C5 (S type only)
-     - ``OM5 CM5 HM51 HM52 HM53``
-   * - Vinyl side chain (monolignols)
-     - ``CA HA CB HB``
-   * - sp³ side chain (chain units)
-     - ``CA HA OA HOA CB HB``
-   * - γ-Alcohol
-     - ``CG HG1 HG2 OG HOG``
+   * - ``<name>.top``
+     - Self-contained topology; includes ``oplsaa.ff/forcefield.itp``
+       (GROMACS must find ``oplsaa.ff``: system install or ``GMXLIB``).
+       Bonded parameters are left blank and resolved by ``grompp`` from
+       ``ffbonded.itp``, so a missing parameter is an explicit error.
+   * - ``<name>.gro``
+     - Coordinates (nm) centred in a cubic box.
+   * - ``em.mdp``
+     - Energy-minimisation parameters.
+   * - ``<name>_topology_report.json``
+     - Linkages and per-residue charge summary.
+   * - ``<name>_charge_report.txt / .json``
+     - Which charges were renormalised, on which atoms and types, and by how
+       much (see :ref:`charge-report`).
+
+For the complete simulation workflow (solvation, equilibration, production,
+coarse-grained models) see :ref:`md_workflows`.
 
 ----
 
-Automatic Type Assignment
---------------------------
+How types are assigned
+----------------------
 
-A raw LignoForge PDB contains residue names but no atom-type information.
-The script ``lignin_ff/tools/assign_chain_types.py`` reads the PDB, detects
-all inter-residue bonds, identifies each linkage type from the bonded atom
-names, and produces:
+Typing uses only the atom names of each residue and the *linkage context*
+(which atoms take part in an inter-monomer bond, and of which linkage).
+Every inter-monomer bond of the graph must match one of the valid atom pairs
+below; anything else raises ``TypingError`` instead of being guessed.
 
-- A **custom per-chain RTP** with correct OPLS-AA types at all linkage sites.
-- An optional **renamed PDB** with ≤3-character GROMACS residue names.
+.. list-table::
+   :header-rows: 1
+   :widths: 20 40 40
 
-The script supports all seven standard lignin linkage types:
-β-O-4, 5-5, 4-O-5, β-5, β-β, α-O-4, and β-1.
+   * - Linkage
+     - Bonded atom pair(s)
+     - Notes
+   * - β-O-4
+     - ``CB`` – ``O4H``
+     - Cα receives an α-OH
+   * - α-O-4
+     - ``CA`` – ``O4H``
+     - Cβ left as CH\ :sub:`2`
+   * - 4-O-5
+     - ``C5`` – ``O4H``
+     -
+   * - 5-5
+     - ``C5`` – ``C5``
+     -
+   * - β-5
+     - ``CB`` – ``C5`` and ``CA`` – ``O4H``
+     - second bond closes the coumaran ring
+   * - β-β
+     - ``CB`` – ``CB`` and ``CA`` – ``OG`` (×2)
+     - resinol: two furan-ring closures
 
-.. code-block:: bash
-
-   # Minimal usage — outputs chain_custom.rtp and chain_renamed.pdb
-   python lignin_ff/tools/assign_chain_types.py chain.pdb
-
-   # Explicit output paths
-   python lignin_ff/tools/assign_chain_types.py chain.pdb \
-       -o chain_custom.rtp \
-       --renamed-pdb chain_renamed.pdb
-
-Using the API directly:
-
-.. code-block:: python
-
-   import sys
-   sys.path.insert(0, "lignin_ff/tools")
-   from assign_chain_types import assign_chain_types
-
-   typed = assign_chain_types(
-       "chain.pdb",
-       rtp_out="chain_custom.rtp",
-       renamed_pdb_out="chain_renamed.pdb",
-   )
-
-   # typed[residue_seq]["rtp_name"]  → e.g. "GYU", "HPM", …
-   # typed[residue_seq]["atoms"]     → {atom_name: (opls_type, charge, cgnr), …}
-   # typed[residue_seq]["linkages"]  → [(linkage_name, position), …]
+Atom names follow the generator: ring ``C1 C2 H2 C3 C4 C5 C6``; phenol
+``O4H HO4``; methoxy ``OM3 CM3 HM31-33`` and ``OM5 CM5 HM51-53``; side chain
+``CA HA OA HOA CB HB CG HG1 HG2 OG HOG``.  The full type table with
+justifications is in :ref:`opls_aa_parametrization`.
 
 ----
 
-Full Workflow: LignoForge → GROMACS
--------------------------------------
+.. _charge-report:
 
-**Step 1 — Generate an atomistic PDB with LignoForge**
+Charge renormalisation report
+-----------------------------
+
+Fragment charges are OPLS-AA database values; C–O–C bridges (``opls_199`` /
+``opls_179`` and ``opls_183`` / ``opls_185``) are neutral by construction.
+A residue that carries other linkages can still end with a small net charge,
+which is removed by shifting *every atom of that residue* by the same amount
+(residual / number of atoms).  The shifts are small (largest in the test
+chains: 0.013 e) and the chain is exactly neutral for any topology.
+
+Every run documents the changes:
+
+.. code-block:: text
+
+   res name  atoms  raw net (e)  shift/atom (e)  max |Δ| (e)   linkages
+     4 SYU      31      +0.2000        -0.00645      0.00650   beta-O-4
+   ...
+   By OPLS type (all residues):
+   type        atoms   mean Δ (e)      min Δ      max Δ
+   opls_145       10     -0.00192   -0.00650   +0.00170
+   ...
+   Largest single-atom change: -0.00650 e on C2 (index 86, residue 4 SYU, opls_145; -0.1150 → -0.1215)
+
+The JSON file lists the raw charge, final charge and shift of **every atom**
+and the per-type aggregation.  The same information is available in Python:
 
 .. code-block:: python
 
-   from lignoforge.core.monomer import Monomer
-   from lignoforge.core.polymer import Polymer
-   from lignoforge.structure.pdb import PDBStructureWriter
-
-   m = Monomer("G", monomer_index=0)
-   m.create()
-   p = Polymer(m, verbose=False)
-   p.add_specific_monomer("G", "beta-O-4")
-   p.add_specific_monomer("S", "beta-O-4")
-
-   PDBStructureWriter().write_polymer_pdb(p, "chain.pdb", optimize_3d=True)
-
-Or via the pipeline (see :doc:`pipeline_usage`):
-
-.. code-block:: python
-
-   from lignoforge.pipeline import LigninPipeline
-
-   results = LigninPipeline.from_json("examples/lignin_input_example.json").run()
-   # PDB files are written to results.output_dir/pdb/
-
-**Step 2 — Assign OPLS-AA types**
-
-.. code-block:: bash
-
-   python lignin_ff/tools/assign_chain_types.py chain.pdb
-   # → chain_custom.rtp
-   # → chain_renamed.pdb
-
-**Step 3 — Install the force-field files**
-
-For a project-local force field (recommended for reproducibility):
-
-.. code-block:: bash
-
-   cp -r /usr/share/gromacs/top/oplsaa.ff ./oplsaa.ff
-   cp lignin_ff/lignin.rtp oplsaa.ff/
-   cat lignin_ff/residuetypes_lignin.dat >> oplsaa.ff/residuetypes.dat
-
-**Step 4 — Run pdb2gmx**
-
-.. code-block:: bash
-
-   gmx pdb2gmx \
-       -f chain_renamed.pdb \
-       -ff ./oplsaa \
-       -water tip3p \
-       -o processed.gro \
-       -p topol.top \
-       -rtpres chain_custom.rtp
-
-``pdb2gmx`` will look up each residue name in ``chain_custom.rtp``, assign
-bonds, angles, dihedrals, and impropers automatically, and produce a complete
-GROMACS topology.
+   from lignoforge.forcefield import build_chain_topology
+   topo = build_chain_topology(chain)          # chain = atomistic topology dict
+   topo.charge_adjustments()                   # per atom
+   topo.charge_adjustments_by_type()           # per OPLS type
+   print(topo.charge_report_text())
 
 ----
 
-Running the Validation Tests
-------------------------------
+Torsions and impropers
+----------------------
 
-.. code-block:: bash
+* All proper dihedrals (Ryckaert-Bellemans, func 3) and 1-4 pairs are
+  generated for every central bond.
+* Ring carbons use ``improper_Z_CA_X_Y``; sp\ :sup:`2` vinyl carbons
+  (``opls_142``) use ``improper_Z_CM_X_Y``.
+* Two torsions are absent from OPLS-AA and are added to the ``.top`` as
+  analogues: ``CA CA CM HC`` (zero, as for ethylbenzene ``CA CA CT HC``) and
+  ``CA CT CT CA`` (hydrocarbon values, as ``CA CT CT CT``).
 
-   python lignin_ff/tools/test_assign.py
-   # or
-   python -m pytest lignin_ff/tools/test_assign.py -v
+----
 
-The test suite (13 tests) checks:
+Validating a setup
+------------------
 
-- Isolated H, G, S monomers → correct residue name and free-phenol types.
-- GGG, HH, SSS β-O-4 chains → correct aryl-ether and sp³-ether types.
-- G–G 5-5, G–H 4-O-5, G–G β-1 dimers → linkage-specific type modifications.
-- Net charge = 0.000 e for **every** residue in every test.
+``tools/validate_pipeline.py`` runs growth → chemistry → clash check →
+topology → ``grompp`` → EM → short MD → CG for a set of reference and random
+chains::
 
-See :ref:`atom-type-table` for the scientific background behind the type
-assignments.
+   python tools/validate_pipeline.py --md --random 10
+   python -m pytest tests -v

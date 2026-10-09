@@ -24,6 +24,9 @@ pbc                 = xyz
 """
 
 
+import math
+
+
 def _steps(time_ps: float) -> int:
     return max(1, int(round(time_ps / DT_PS)))
 
@@ -39,7 +42,11 @@ constraints         = none
 {_COMMON_NB}"""
 
 
-def _dynamics(time_ps, temperature, label, pcoupl, gen_vel, continuation, out_ps):
+def _dynamics(time_ps, temperature, label, pcoupl, gen_vel, continuation, out_ps, seed=-1):
+    n_out = max(1, int(round(out_ps / DT_PS)))
+    # energies are computed every nstcalcenergy steps; nstenergy/nstlog must be
+    # multiples of it, so use the greatest common divisor with GROMACS' default.
+    n_calc = math.gcd(n_out, 100)
     pc = (
         f"""pcoupl              = {pcoupl}
 pcoupltype          = isotropic
@@ -55,9 +62,10 @@ refcoord-scaling    = com
 integrator          = md
 dt                  = {DT_PS}
 nsteps              = {_steps(time_ps)}
-nstxout-compressed  = {max(1, int(out_ps / DT_PS))}
-nstenergy           = {max(1, int(out_ps / DT_PS))}
-nstlog              = {max(1, int(out_ps / DT_PS))}
+nstcalcenergy       = {n_calc}
+nstxout-compressed  = {n_out}
+nstenergy           = {n_out}
+nstlog              = {n_out}
 continuation        = {"yes" if continuation else "no"}
 constraint-algorithm = lincs
 constraints         = h-bonds
@@ -69,20 +77,27 @@ tau-t               = 0.1
 ref-t               = {temperature}
 {pc}gen-vel             = {"yes" if gen_vel else "no"}
 gen-temp            = {temperature}
-gen-seed            = -1
+gen-seed            = {seed}
 {_COMMON_NB}"""
 
 
-def nvt_mdp(time_ps: float = 100.0, temperature: float = 300.0) -> str:
-    return _dynamics(time_ps, temperature, "NVT equilibration", "no", True, False, 10.0)
+def nvt_mdp(time_ps: float = 100.0, temperature: float = 300.0, seed: int = -1) -> str:
+    """NVT run; initial velocities are drawn with *seed* (-1 = random)."""
+    return _dynamics(time_ps, temperature, "NVT equilibration", "no", True, False, 10.0, seed)
 
 
 def npt_mdp(time_ps: float = 200.0, temperature: float = 300.0) -> str:
     return _dynamics(time_ps, temperature, "NPT equilibration", "C-rescale", False, True, 10.0)
 
 
-def prod_mdp(time_ps: float = 10000.0, temperature: float = 300.0, npt: bool = True) -> str:
+def prod_mdp(
+    time_ps: float = 10000.0,
+    temperature: float = 300.0,
+    npt: bool = True,
+    out_ps: float = 10.0,
+) -> str:
+    """Production run; positions, energies and log are written every *out_ps*."""
     return _dynamics(
         time_ps, temperature, "Production", "Parrinello-Rahman" if npt else "no",
-        False, True, 10.0,
+        False, True, out_ps,
     )
