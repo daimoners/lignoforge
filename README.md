@@ -470,7 +470,7 @@ lignoforge/
 ├── priors/             # LigninPriorEstimator + literature data tables
 ├── io/                 # InputSchemaValidator, LigninExporter, lignin_info_schema.json
 ├── structure/          # MolecularStructureGenerator, PDBStructureWriter
-├── forcefield/         # OPLS-AA typing, charge neutralisation, GROMACS topology from the bond graph
+├── forcefield/         # OPLS-AA typing, junction charge correction, GROMACS topology from the bond graph
 ├── md/                 # Atomistic GROMACS workflow (EM/NVT/NPT/production)
 ├── cg/                 # One-bead-per-monomer CG model, Boltzmann inversion
 └── cli/                # lignoforge-chain, lignoforge-cg-fit
@@ -500,8 +500,8 @@ lignoforge-chain --n-monomers 10 --format md           # full atomistic workflow
 lignoforge-chain --n-monomers 10 --n-chains 4 --format cg   # coarse-grained system
 ```
 
-Every run writes a charge-renormalisation report listing which charges were
-shifted, on which atoms and OPLS types, and by how much. See the
+Every run writes a charge report listing the junction corrections and which
+atoms and OPLS types were changed, and by how much. See the
 documentation pages *Force-Field Setup* and *Simulation Workflows*, and
 validate an installation with `python tools/validate_pipeline.py`.
 

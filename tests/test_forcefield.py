@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import collections
 import copy
+import re
 import io
 import contextlib
 import shutil
@@ -22,7 +23,9 @@ from lignoforge.cli.build_chain import _grow_chain_exact
 from lignoforge.core.monomer import Monomer
 from lignoforge.core.polymer import Polymer
 from lignoforge.forcefield import TypingError, build_chain_topology, write_gromacs_system
-from lignoforge.forcefield.charges import neutralize_residue
+from lignoforge.forcefield.charges import (
+    DERIVATIVE_EXCESS, LINKAGE_EXCESS, Junction, correct_charges,
+)
 from lignoforge.forcefield.opls import linkage_position
 from lignoforge.structure.generator import MolecularStructureGenerator
 
@@ -49,16 +52,70 @@ def _grow(n, mono, linkages: dict, seed, branching=0.0):
         return _grow_chain_exact(n, m.tolist(), lk.tolist(), seed, branching)
 
 
-# ── Charge neutralisation ─────────────────────────────────────────────────────
+# ── Charge correction by junction ────────────────────────────────────────────
 
-@pytest.mark.parametrize("residual", [0.0, 0.2, -0.24, 0.085, 0.00031])
-def test_neutralize_residue_sums_to_exactly_zero(residual):
-    q = {f"A{i}": (0.1 if i % 2 else -0.1) for i in range(32)}
-    q["A0"] += residual
-    new, res, shift = neutralize_residue(q)
-    assert res == pytest.approx(residual)
+def _line_graph(n):
+    return {i: ({i - 1} if i > 1 else set()) | ({i + 1} if i < n else set()) for i in range(1, n + 1)}
+
+
+@pytest.mark.parametrize("excess", [0.0, 0.2, -0.115, 0.1033])
+def test_correct_charges_is_local_and_exactly_neutral(excess):
+    n = 20
+    raw = {i: 0.0 for i in range(1, n + 1)}
+    raw[10] += excess                                        # the excess sits at the junction
+    j = Junction("linkage", "test", [10, 11], excess)
+    new, unexplained = correct_charges(raw, [j], _line_graph(n))
+    assert unexplained == 0.0
     assert sum(round(v * 10000) for v in new.values()) == 0
-    assert shift <= abs(residual) / len(q) + 2e-4
+    far = [i for i in raw if i not in j.atoms]
+    assert far and all(new[i] == raw[i] for i in far)        # nothing changes away from the junction
+    assert set(j.atoms) == {9, 10, 11, 12}                   # core and directly bonded neighbours
+
+
+def test_correct_charges_reports_and_spreads_an_unexplained_remainder():
+    raw = {i: 0.0 for i in range(1, 11)}
+    raw[3] = 0.05                                            # excess not in any table
+    j = Junction("linkage", "test", [4, 5], 0.0)
+    new, unexplained = correct_charges(raw, [j], _line_graph(10))
+    assert unexplained == pytest.approx(0.05)
+    assert sum(round(v * 10000) for v in new.values()) == 0
+    assert new[9] == raw[9]                                  # far atoms untouched
+
+
+def test_residues_are_not_forced_neutral_and_beta_O_4_is_untouched():
+    """The ±0.2 e of the split C–O–C group is physical: neither residue is neutralised."""
+    p = _grow(2, [0, 1, 0], {"beta-O-4": 1}, 1)
+    topo = build_chain_topology(_atomistic(p))
+    nets = sorted(r["net_charge"] for r in topo.charge_report)
+    assert nets == pytest.approx([-0.2, 0.2])
+    assert topo.net_charge == 0.0
+    assert all(a.charge == a.raw_charge for a in topo.atoms)
+    assert topo.charge_corrections == []
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_junction_excess_is_additive(seed):
+    """The raw chain charge is exactly the sum of the per-junction excesses (incl. derivatives)."""
+    from lignoforge.core.builder import build_chain_dict
+    spec = {"n_monomers": 6, "monomers": {"H": 0.1, "G": 0.5, "S": 0.4},
+            "linkages": {k: 1 for k in LINKAGE_EXCESS if k != "beta-1"}, "seed": seed}
+    if seed % 2:
+        spec["derivatization"] = [{"site": "benzylic", "reagent": "acetyl", "degree": 0.7},
+                                  {"site": "gamma", "reagent": "acyl:3", "degree": 0.6},
+                                  {"site": "phenolic", "reagent": "methyl", "degree": 0.5}]
+    with contextlib.redirect_stdout(io.StringIO()):
+        chain, _ = build_chain_dict(spec, optimize=False)
+    topo = build_chain_topology(chain)
+    raw_total = sum(a.raw_charge for a in topo.atoms)
+    expected = sum(LINKAGE_EXCESS[lk["linkage"]] for lk in topo.linkages)
+    n_der = collections.Counter()
+    for a in topo.atoms:
+        m = re.fullmatch(r"C([PAG])(M|C)", a.name)
+        if m:
+            n_der[(m.group(1), "methyl" if m.group(2) == "M" else "ester")] += 1
+    expected += sum(DERIVATIVE_EXCESS[k] * v for k, v in n_der.items())
+    assert raw_total == pytest.approx(expected, abs=1e-6)
+    assert topo.charge_unexplained == 0.0 and topo.net_charge == 0.0
 
 
 # ── Linkage validation ────────────────────────────────────────────────────────
@@ -114,7 +171,7 @@ def test_dimer_topology_is_complete_and_neutral(linkage, mtype):
 
     assert topo.net_charge == 0.0
     for res in topo.charge_report:
-        assert res["max_atom_shift"] < 0.02
+        assert res["max_atom_shift"] < 0.04
     assert {lk["linkage"] for lk in topo.linkages} <= {linkage}
     # every graph bond is present exactly once
     assert len(topo.bonds) == len(set(topo.bonds)) == len(chain["bonds"])
@@ -141,11 +198,15 @@ def test_charge_adjustment_report_is_consistent():
     assert len(adj) == len(topo.atoms)
     assert sum(r["delta"] for r in adj) == pytest.approx(-sum(
         r["raw_net_charge"] for r in topo.charge_report), abs=1e-4)
-    for r in topo.charge_report:                          # per residue: Σδ = −raw net
-        d = sum(x["delta"] for x in adj if x["residue"] == r["residue"])
-        assert d == pytest.approx(-r["raw_net_charge"], abs=1e-4)
+    # each correction is local: only atoms of the junctions are changed
+    assert 0 < sum(1 for r in adj if abs(r["delta"]) > 1e-9) < len(adj)
+    assert sum(c["excess"] for c in topo.charge_corrections) == pytest.approx(
+        sum(r["raw_net_charge"] for r in topo.charge_report), abs=1e-4)
+    for r in topo.charge_report:
+        assert r["net_charge"] == pytest.approx(
+            sum(a.charge for a in topo.atoms if a.resid == r["residue"]), abs=1e-4)
     text = topo.charge_report_text()
-    assert "By OPLS type" in text and "Largest single-atom change" in text
+    assert "Junction corrections" in text and "By OPLS type" in text and "Largest single-atom change" in text
     assert {t["opls"] for t in topo.charge_adjustments_by_type()} == {a.opls for a in topo.atoms}
 
 

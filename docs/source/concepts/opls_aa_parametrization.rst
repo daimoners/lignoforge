@@ -130,18 +130,22 @@ Charge neutrality of ether bridges
 Turning a phenol into an aryl ether removes ``HO4`` and changes ``C4`` /
 ``O4H`` from +0.150 / −0.585 / +0.435 to +0.085 / −0.285, a net change of
 −0.200 e.  The β-O-4 acceptor ``CB`` + ``HB`` (``opls_183`` +0.170,
-``opls_185`` +0.030) change by +0.200 e, so every β-O-4 and α-O-4 bond is
-exactly neutral.  The 4-O-5, 5-5, β-5 and β-β linkages are not neutral by
-construction and rely on the per-residue renormalisation.
+``opls_185`` +0.030) change by +0.200 e, so every β-O-4 bond is exactly
+neutral as a whole, with the acceptor residue at −0.2 e and the donor at
++0.2 e.  The α-O-4, 4-O-5, β-5 and β-β linkages leave small excesses
+(−0.025, −0.115, −0.0125 and +0.103 e per bond).
 
-Per-residue renormalisation
----------------------------
+Correction by junction
+----------------------
 
-Each residue is made exactly neutral by shifting all of its atoms by the same
-amount (residual / n atoms), rounded to 10\ :sup:`-4` e.  This is preferred to
-recomputing the charges: when the residual is modest it perturbs the polar
-groups least, and it keeps the OPLS fragment values recognisable.  The
-resulting changes are reported for every chain (:ref:`charge-report`).
+The excess of each junction type is additive, so it is tabulated
+(:data:`lignoforge.forcefield.charges.LINKAGE_EXCESS`,
+:data:`DERIVATIVE_EXCESS`) and removed locally: spread uniformly (the
+minimum-norm correction) over the junction atoms and their bonded neighbours,
+rounded to 10\ :sup:`-4` e.  No residue is forced to be neutral.  The
+tables are checked by a test that compares the raw charge of random chains with
+the sum of their junction excesses (zero deviation).  See :ref:`charge-report`
+for the rationale and the electrostatic-potential comparison with HF/6-31G\*.
 
 Torsions absent from OPLS-AA
 ----------------------------

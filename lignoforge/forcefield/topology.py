@@ -19,10 +19,13 @@ from __future__ import annotations
 import collections
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-from lignoforge.forcefield.charges import neutralize_residue
+from lignoforge.forcefield.charges import (
+    DERIVATIVE_EXCESS, LINKAGE_EXCESS, Junction, correct_charges,
+)
 from lignoforge.forcefield.opls import (
     EXTRA_DIHEDRALTYPES,
     TypingError,
@@ -32,6 +35,7 @@ from lignoforge.forcefield.opls import (
 
 __all__ = ["Atom", "ChainTopology", "build_chain_topology", "write_gromacs_system"]
 
+_DERIV_FIRST_ATOM = re.compile(r"C([PAG])(M|C)")   # first atom of a derivative group
 _RING_NAMES = ("C1", "C2", "C3", "C4", "C5", "C6")
 _IMPROPER_AROMATIC = "improper_Z_CA_X_Y"   # ring carbons
 _IMPROPER_ALKENE = "improper_Z_CM_X_Y"     # sp2 vinyl carbons (opls_142)
@@ -64,7 +68,7 @@ class Atom:
     opls: str
     charge: float         # final charge written to the topology
     xyz: Tuple[float, float, float]  # Å
-    raw_charge: float = 0.0  # fragment charge before neutralisation
+    raw_charge: float = 0.0  # OPLS fragment charge before the junction correction
 
 
 @dataclass
@@ -80,6 +84,8 @@ class ChainTopology:
     impropers: List[Tuple[int, int, int, int, str]]   # (i, j, k, l, macro)
     linkages: List[dict] = field(default_factory=list)
     charge_report: List[dict] = field(default_factory=list)
+    charge_corrections: List[dict] = field(default_factory=list)
+    charge_unexplained: float = 0.0
 
     @property
     def net_charge(self) -> float:
@@ -107,6 +113,7 @@ class ChainTopology:
             ],
             "bonds": [list(b) for b in self.bonds],
             "linkages": self.linkages, "residues": self.charge_report,
+            "charge_corrections": self.charge_corrections,
         }
         if include_terms:
             d.update(angles=[list(t) for t in self.angles],
@@ -118,7 +125,7 @@ class ChainTopology:
     # ── Charge renormalisation report ────────────────────────────────────────
 
     def charge_adjustments(self) -> List[dict]:
-        """Per-atom record of the neutralisation: raw charge, final charge, shift."""
+        """Per-atom record of the junction correction: raw charge, final charge, shift."""
         return [
             {"residue": a.resid, "resname": a.resname, "atom_index": a.index,
              "atom": a.name, "opls": a.opls, "raw_charge": a.raw_charge,
@@ -127,7 +134,7 @@ class ChainTopology:
         ]
 
     def charge_adjustments_by_type(self) -> List[dict]:
-        """Shifts aggregated by OPLS type (count, mean, min, max)."""
+        """Corrections aggregated by OPLS type (count, mean, min, max)."""
         groups: Dict[str, List[float]] = collections.defaultdict(list)
         for rec in self.charge_adjustments():
             groups[rec["opls"]].append(rec["delta"])
@@ -138,19 +145,29 @@ class ChainTopology:
         ]
 
     def charge_report_text(self) -> str:
-        """Human-readable summary of which charges were renormalised, and by how much."""
-        L = [f"Charge renormalisation report — {self.name}",
-             "Each residue's net charge is removed by shifting every atom of",
-             "that residue by the same amount (residual / n_atoms), then rounding",
-             "to 1e-4 e with the rounding leftover given to the least polar atoms.", "",
-             f"{'res':>4s} {'name':5s} {'atoms':>5s} {'raw net (e)':>12s} "
-             f"{'shift/atom (e)':>15s} {'max |Δ| (e)':>12s}   linkages"]
-        n_atoms = collections.Counter(a.resid for a in self.atoms)
+        """Human-readable summary of how the raw OPLS charges were corrected."""
+        L = [f"Charge report — {self.name}",
+             "Atoms carry OPLS-AA fragment charges.  Residues are NOT forced to be neutral: where a",
+             "bond joins two residues (or a group is attached) the neutral OPLS group is split across",
+             "them, so residues can carry charges such as ±0.2 e.  Each junction type leaves a fixed",
+             "excess of raw charge; it is removed locally, spread uniformly over the junction atoms",
+             "and their directly bonded neighbours, so the chain is exactly neutral.", "",
+             "Junction corrections:",
+             f"{'junction':22s} {'atoms (core)':24s} {'excess (e)':>10s} {'atoms hit':>9s} {'shift/atom (e)':>15s}"]
+        if not self.charge_corrections:
+            L.append("  none needed (the raw fragment charges of this chain already add to zero)")
+        for c in self.charge_corrections:
+            core = " – ".join(f"{x['atom']}({x['residue']})" for x in c["core"])
+            L.append(f"{c['kind'][:4]}: {c['label']:16s} {core:24s} {c['excess']:+10.4f} "
+                     f"{c['n_atoms']:9d} {c['shift_per_atom']:+15.5f}")
+        if self.charge_unexplained:
+            L.append(f"  unexplained remainder spread over all junction atoms: {self.charge_unexplained:+.5f} e")
+        L += ["", f"{'res':>4s} {'name':5s} {'raw net (e)':>12s} {'final net (e)':>14s} "
+                  f"{'max |Δ| (e)':>12s}   linkages"]
         for r in self.charge_report:
-            per = -r["raw_net_charge"] / n_atoms[r["residue"]]
-            L.append(f"{r['residue']:4d} {r['resname']:5s} {n_atoms[r['residue']]:5d} "
-                     f"{r['raw_net_charge']:+12.4f} {per:+15.5f} "
-                     f"{r['max_atom_shift']:12.5f}   {', '.join(r['linkages']) or '-'}")
+            L.append(f"{r['residue']:4d} {r['resname']:5s} {r['raw_net_charge']:+12.4f} "
+                     f"{r['net_charge']:+14.4f} {r['max_atom_shift']:12.5f}   "
+                     f"{', '.join(r['linkages']) or '-'}")
         L += ["", "By OPLS type (all residues):",
               f"{'type':10s} {'atoms':>6s} {'mean Δ (e)':>12s} {'min Δ':>10s} {'max Δ':>10s}"]
         for t in self.charge_adjustments_by_type():
@@ -161,7 +178,7 @@ class ChainTopology:
                   f"{worst['atom']} (index {worst['atom_index']}, residue "
                   f"{worst['residue']} {worst['resname']}, {worst['opls']}; "
                   f"{worst['raw_charge']:+.4f} → {worst['charge']:+.4f})",
-              f"Chain net charge after renormalisation: {self.net_charge:+.4f} e"]
+              f"Chain net charge: {self.net_charge:+.4f} e"]
         return "\n".join(L) + "\n"
 
     def write_charge_report(self, output_dir: str) -> Dict[str, str]:
@@ -172,6 +189,8 @@ class ChainTopology:
         _write(js, json.dumps({
             "name": self.name, "net_charge": self.net_charge,
             "residues": self.charge_report,
+            "corrections": self.charge_corrections,
+            "unexplained_residual": self.charge_unexplained,
             "by_type": self.charge_adjustments_by_type(),
             "atoms": self.charge_adjustments(),
         }, indent=1))
@@ -367,27 +386,17 @@ def build_chain_topology(chain: dict, name: Optional[str] = None) -> ChainTopolo
         })
     bond_list = sorted(bonds)
 
-    # ── Typing and per-residue neutralisation ─────────────────────────────────
+    # ── Typing (raw OPLS fragment charges) ────────────────────────────────────
     atoms: Dict[int, Atom] = {}
-    report: List[dict] = []
     for m_id in sorted(res_atoms):
-        names = set(res_atoms[m_id])
-        typed = type_residue(names, context[m_id])
-        charges, residual, shift = neutralize_residue(
-            {n: q for n, (_t, q) in typed.items()})
+        typed = type_residue(set(res_atoms[m_id]), context[m_id])
         resname = next(iter(res_atoms[m_id].values()))["residue_name"]
-        report.append({
-            "residue": resid_of[m_id], "resname": resname,
-            "linkages": sorted({lk for lk, _ in context[m_id].values()}),
-            "raw_net_charge": round(residual, 4),
-            "max_atom_shift": round(shift, 4),
-        })
         for n, a in res_atoms[m_id].items():
             idx = new_index[int(a["atom_id"])]
             atoms[idx] = Atom(
                 index=idx, name=n, element=a["element"],
                 resid=resid_of[m_id], resname=resname,
-                opls=typed[n][0], charge=charges[n],
+                opls=typed[n][0], charge=typed[n][1],
                 xyz=(float(a["x"]), float(a["y"]), float(a["z"])),
                 raw_charge=typed[n][1],
             )
@@ -396,6 +405,52 @@ def build_chain_topology(chain: dict, name: Optional[str] = None) -> ChainTopolo
     for i, j in bond_list:
         adj[i].add(j)
         adj[j].add(i)
+
+    # ── Charge correction by junction (no per-residue neutrality) ─────────────
+    index_of = {(a.resid, a.name): a.index for a in atoms.values()}
+    junctions: List[Junction] = []
+    for lk in linkages:
+        if lk["linkage"] not in LINKAGE_EXCESS:
+            raise TypingError(f"No charge-excess entry for linkage '{lk['linkage']}'")
+        junctions.append(Junction(
+            "linkage", lk["linkage"],
+            [index_of[(lk["residue_1"], lk["atom_1"])], index_of[(lk["residue_2"], lk["atom_2"])]],
+            LINKAGE_EXCESS[lk["linkage"]]))
+    for a in atoms.values():
+        m = _DERIV_FIRST_ATOM.fullmatch(a.name)
+        if not m:
+            continue
+        kind = "methyl" if m.group(2) == "M" else "ester"
+        parents = [n for n in adj[a.index]
+                   if atoms[n].resid == a.resid and atoms[n].element == "O"
+                   and atoms[n].name in ("O4H", "OA", "OG")]
+        if len(parents) != 1:
+            raise TypingError(f"Derivative atom {a.name} of residue {a.resid} is not bonded "
+                              "to exactly one hydroxyl oxygen")
+        junctions.append(Junction("derivative", f"{m.group(1)} {kind}", [parents[0], a.index],
+                                  DERIVATIVE_EXCESS[(m.group(1), kind)]))
+    final, unexplained = correct_charges({i: a.raw_charge for i, a in atoms.items()}, junctions, adj)
+    for i, q in final.items():
+        atoms[i].charge = q
+
+    by_res: Dict[int, List[Atom]] = collections.defaultdict(list)
+    for a in atoms.values():
+        by_res[a.resid].append(a)
+    report: List[dict] = []
+    for m_id in sorted(res_atoms):
+        r = resid_of[m_id]
+        report.append({
+            "residue": r, "resname": by_res[r][0].resname,
+            "linkages": sorted({lk for lk, _ in context[m_id].values()}),
+            "raw_net_charge": round(sum(a.raw_charge for a in by_res[r]), 4),
+            "net_charge": round(sum(a.charge for a in by_res[r]), 4),
+            "max_atom_shift": round(max(abs(a.charge - a.raw_charge) for a in by_res[r]), 4),
+        })
+    corrections = [{
+        "kind": j.kind, "label": j.label, "excess": round(j.excess, 5),
+        "core": [{"index": c, "atom": atoms[c].name, "residue": atoms[c].resid} for c in j.core],
+        "n_atoms": len(j.atoms), "shift_per_atom": round(j.shift_per_atom, 5),
+    } for j in junctions if abs(j.excess) > 0]
 
     angles, dihedrals, pairs = _derive_bonded_terms(adj, bond_list)
 
@@ -442,9 +497,10 @@ def build_chain_topology(chain: dict, name: Optional[str] = None) -> ChainTopolo
         bonds=bond_list, angles=angles, dihedrals=dihedrals,
         pairs=pairs, impropers=impropers,
         linkages=linkages, charge_report=report,
+        charge_corrections=corrections, charge_unexplained=round(unexplained, 5),
     )
     if abs(topo.net_charge) > 1e-6:
-        raise TypingError(f"Net charge {topo.net_charge} after neutralisation")
+        raise TypingError(f"Net charge {topo.net_charge} after charge correction")
     return topo
 
 

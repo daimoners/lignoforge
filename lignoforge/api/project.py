@@ -246,6 +246,7 @@ class Project:
         from lignoforge.forcefield import build_chain_topology
         t = build_chain_topology(self.chain_data(cid), name="lig")
         return {"text": t.charge_report_text(), "residues": t.charge_report,
+                "corrections": t.charge_corrections, "unexplained": t.charge_unexplained,
                 "by_type": t.charge_adjustments_by_type(),
                 "atoms": t.charge_adjustments(), "net_charge": t.net_charge}
 

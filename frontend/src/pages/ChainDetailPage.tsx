@@ -146,15 +146,22 @@ function ChargesTab({ p, cid }: { p: string; cid: string }) {
   const maxMean = Math.max(...d.by_type.map(t => Math.abs(t.mean_delta)), 1e-9);
   const top = [...d.atoms].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 10);
   return <div className="stack">
-    <Alert kind="info" title="How charges are set.">Atoms receive OPLS-AA fragment charges. A residue that ends up with a small net charge is made exactly neutral by shifting <b>every atom of that residue by the same amount</b> (residual ÷ number of atoms). This report shows what was changed. Total chain charge: <b>{fmtSigned(d.net_charge, 4)} e</b>.</Alert>
+    <Alert kind="info" title="How charges are set.">Atoms receive OPLS-AA fragment charges. Residues are <b>not</b> forced to be neutral: where a bond joins two residues the neutral OPLS group is split between them, so residues can carry charges such as ±0.2 e. Each junction type leaves a fixed excess of charge, which is removed <b>locally</b> on the junction atoms and their bonded neighbours. Total chain charge: <b>{fmtSigned(d.net_charge, 4)} e</b>.</Alert>
+    <Card title="Junction corrections" pad={false}>
+      {d.corrections.length === 0 ? <div className="empty small">None needed: the raw fragment charges of this chain already add to zero.</div> :
+        <table><thead><tr><th>Junction</th><th>Core atoms</th><th className="num">Excess (e)</th><th className="num">Atoms corrected</th><th className="num">Shift per atom (e)</th></tr></thead>
+          <tbody>{d.corrections.map((c, i) => <tr key={i}><td>{c.kind === "linkage" ? linkLabel(c.label) : `${c.label} (derivative)`}</td>
+            <td className="mono">{c.core.map(x => `${x.atom}(${x.residue})`).join(" – ")}</td>
+            <td className="num">{fmtSigned(c.excess)}</td><td className="num">{c.n_atoms}</td><td className="num">{fmtSigned(c.shift_per_atom, 5)}</td></tr>)}</tbody></table>}
+    </Card>
     <div className="grid cols-2">
       <Card title="By residue" pad={false}>
-        <table><thead><tr><th>Residue</th><th>Linkages</th><th className="num">Raw net (e)</th><th className="num">Max |Δq| (e)</th></tr></thead>
+        <table><thead><tr><th>Residue</th><th>Linkages</th><th className="num">Raw net (e)</th><th className="num">Final net (e)</th><th className="num">Max |Δq| (e)</th></tr></thead>
           <tbody>{d.residues.map(r => <tr key={r.residue}><td>{r.residue} <span className="muted">{r.resname}</span></td>
             <td className="muted">{r.linkages.map(linkLabel).join(", ") || "–"}</td>
-            <td className="num">{fmtSigned(r.raw_net_charge)}</td><td className="num">{r.max_atom_shift.toFixed(4)}</td></tr>)}</tbody></table>
+            <td className="num">{fmtSigned(r.raw_net_charge)}</td><td className="num">{fmtSigned(r.net_charge)}</td><td className="num">{r.max_atom_shift.toFixed(4)}</td></tr>)}</tbody></table>
       </Card>
-      <Card title="By OPLS type (mean shift)" pad={false}>
+      <Card title="By OPLS type (mean correction)" pad={false}>
         <table><thead><tr><th>Type</th><th className="num">Atoms</th><th>Mean Δq (e)</th></tr></thead>
           <tbody>{d.by_type.map(t => <tr key={t.opls}><td><code>{t.opls}</code></td><td className="num">{t.n_atoms}</td>
             <td><div className="row" style={{ gap: 8, flexWrap: "nowrap" }}><div className="bar-bg" style={{ width: 90 }}><div className="bar" style={{ width: `${(Math.abs(t.mean_delta) / maxMean) * 100}%`, background: t.mean_delta < 0 ? "var(--info)" : "var(--brown)" }} /></div>

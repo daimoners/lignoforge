@@ -1,5 +1,5 @@
 """
-Force-field sub-package: OPLS-AA typing, charge neutralisation and graph-based
+Force-field sub-package: OPLS-AA typing, junction charge correction and graph-based
 GROMACS topology generation for lignin chains.
 """
 

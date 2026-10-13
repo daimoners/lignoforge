@@ -13,7 +13,7 @@ Nothing here depends on residue order or on residue adjacency, so linear,
 branched and ring-closed (β-5, β-β) chains are treated identically.
 
 Charges returned here are the *raw* fragment charges.  Per-residue
-neutralisation is a separate step (:mod:`lignoforge.forcefield.charges`).
+the junction correction is a separate step (:mod:`lignoforge.forcefield.charges`).
 """
 
 from __future__ import annotations

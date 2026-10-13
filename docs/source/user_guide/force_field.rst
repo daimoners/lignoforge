@@ -43,7 +43,7 @@ Files written per chain:
    * - ``<name>_topology_report.json``
      - Linkages and per-residue charge summary.
    * - ``<name>_charge_report.txt / .json``
-     - Which charges were renormalised, on which atoms and types, and by how
+     - Junction charge corrections, the atoms and OPLS types changed, and by how
        much (see :ref:`charge-report`).
 
 For the complete simulation workflow (solvation, equilibration, production,
@@ -94,36 +94,56 @@ justifications is in :ref:`opls_aa_parametrization`.
 
 .. _charge-report:
 
-Charge renormalisation report
------------------------------
+Charge report
+-------------
 
-Fragment charges are OPLS-AA database values; C–O–C bridges (``opls_199`` /
-``opls_179`` and ``opls_183`` / ``opls_185``) are neutral by construction.
-A residue that carries other linkages can still end with a small net charge,
-which is removed by shifting *every atom of that residue* by the same amount
-(residual / number of atoms).  The shifts are small (largest in the test
-chains: 0.013 e) and the chain is exactly neutral for any topology.
+Fragment charges are OPLS-AA database values.  Residues are **not** forced to
+be neutral: where a bond joins two residues the neutral OPLS group is split
+between them, so a β-O-4 ether leaves the two residues at −0.2 e and +0.2 e.
+These charges are physical.  What the OPLS fragments do get wrong is small and
+specific to each junction type: every inter-monomer bond (and every attached
+derivative group) leaves a fixed *excess* of charge, additive over the chain
+(β-O-4 and 5-5: 0; α-O-4: −0.025 e; 4-O-5: −0.115 e; β-5: −0.0125 e per bond;
+β-β: +0.103 e per bond; derivatives: γ-esters +0.06 e, benzylic −0.025 e).
+LignoForge removes each excess **locally**, spreading it uniformly over the
+atoms of the junction and their directly bonded neighbours, so the chain is
+exactly neutral for any topology and no atom far from a junction is touched
+(largest single-atom change in random test chains: 0.046 e; most chains change
+by less than 0.02 e).
+
+Why not neutralise each residue?  Because that moves the ±0.2 e of a split
+ether group onto the whole residue, adding a spurious 4–6 D dipole across a
+β-O-4 dimer.  Against HF/6-31G\* electrostatic potentials of G–G dimers the
+per-residue scheme gave RMS errors of 5–7 kcal/mol/e for β-O-4, α-O-4, β-5,
+4-O-5 and β-β; the junction scheme gives 2.7–3.4 kcal/mol/e, the same as the
+raw OPLS charges where those are already neutral (β-O-4, 5-5).  The approach
+follows the modular-linkage-charge practice of GLYCAM and LignAmb25, where
+linking atoms carry fixed charges instead of residues being neutralised.
 
 Every run documents the changes:
 
 .. code-block:: text
 
-   res name  atoms  raw net (e)  shift/atom (e)  max |Δ| (e)   linkages
-     4 SYU      31      +0.2000        -0.00645      0.00650   beta-O-4
-   ...
-   By OPLS type (all residues):
-   type        atoms   mean Δ (e)      min Δ      max Δ
-   opls_145       10     -0.00192   -0.00650   +0.00170
-   ...
-   Largest single-atom change: -0.00650 e on C2 (index 86, residue 4 SYU, opls_145; -0.1150 → -0.1215)
+   Junction corrections:
+   junction               atoms (core)             excess (e) atoms hit  shift/atom (e)
+   link: 4-O-5            C5(1) – O4H(3)              -0.1150         5        +0.02300
+   link: 4-O-5            O4H(1) – C5(2)              -0.1150         5        +0.02300
 
-The JSON file lists the raw charge, final charge and shift of **every atom**
-and the per-type aggregation.  The same information is available in Python:
+    res name   raw net (e)  final net (e)  max |Δ| (e)   linkages
+      1 GYU        -0.1150        +0.0000      0.04600   4-O-5
+      2 GYU        +0.0850        +0.1540      0.02300   4-O-5
+      3 GYU        -0.2000        -0.1540      0.02300   4-O-5
+   ...
+   Largest single-atom change: +0.04600 e on C4 (index 4, residue 1 GYU, opls_199; +0.0850 → +0.1310)
+
+The JSON file lists the junction corrections, the raw charge, final charge and
+shift of **every atom** and the per-type aggregation.  The same information is available in Python:
 
 .. code-block:: python
 
    from lignoforge.forcefield import build_chain_topology
    topo = build_chain_topology(chain)          # chain = atomistic topology dict
+   topo.charge_corrections                     # per junction
    topo.charge_adjustments()                   # per atom
    topo.charge_adjustments_by_type()           # per OPLS type
    print(topo.charge_report_text())

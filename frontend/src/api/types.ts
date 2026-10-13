@@ -66,7 +66,7 @@ export interface TopoAtom {
   opls: string; charge: number; raw_charge: number; x: number; y: number; z: number;
 }
 export interface Residue {
-  residue: number; resname: string; linkages: string[]; raw_net_charge: number; max_atom_shift: number;
+  residue: number; resname: string; linkages: string[]; raw_net_charge: number; net_charge: number; max_atom_shift: number;
 }
 export interface Topology {
   name: string; net_charge: number; n_atoms: number; n_bonds: number; n_angles: number;
@@ -75,8 +75,13 @@ export interface Topology {
   linkages: { linkage: string; residue_1: number; atom_1: string; residue_2: number; atom_2: string }[];
   residues: Residue[];
 }
+export interface ChargeCorrection {
+  kind: string; label: string; excess: number; n_atoms: number; shift_per_atom: number;
+  core: { index: number; atom: string; residue: number }[];
+}
 export interface ChargeReport {
   text: string; net_charge: number; residues: Residue[];
+  corrections: ChargeCorrection[]; unexplained: number;
   by_type: { opls: string; n_atoms: number; mean_delta: number; min_delta: number; max_delta: number }[];
   atoms: { residue: number; resname: string; atom_index: number; atom: string; opls: string;
            raw_charge: number; charge: number; delta: number }[];

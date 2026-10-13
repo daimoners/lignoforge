@@ -116,7 +116,7 @@ def test_topology_is_neutral_and_typed(base, reagent):
     new, rep = derivatize_polymer(base, [rule(s, reagent) for s in ALL], seed=0)
     topo = build_chain_topology(_atomistic(new))
     assert topo.net_charge == 0.0
-    assert max(r["max_atom_shift"] for r in topo.charge_report) < 0.03   # esters are near-neutral groups
+    assert max(r["max_atom_shift"] for r in topo.charge_report) < 0.05   # local junction corrections only
     n_react = sum(r["reacted_sites"] for r in rep["rules"])
     types = collections.Counter(a.opls for a in topo.atoms)
     if reagent == "methyl":

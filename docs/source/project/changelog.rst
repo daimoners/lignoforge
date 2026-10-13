@@ -21,10 +21,15 @@ New features
   All angles, proper dihedrals, 1-4 pairs and aromatic impropers are derived
   from the graph; bonded parameters are resolved by ``grompp`` from
   ``oplsaa.ff``.
-* **Charge scheme**: C–O–C bridges built from ``opls_199/179`` and
-  ``opls_183/185`` are neutral by construction; any residual per residue is
-  removed by spreading it uniformly over that residue's atoms
-  (largest shift < 0.015 e), so the total charge is exactly 0 for any topology.
+* **Charge scheme**: OPLS-AA fragment charges with a **local correction per junction**
+  instead of per-residue neutralisation.  Residues are not forced to be neutral (a
+  β-O-4 ether leaves them at ∓0.2 e, which is physical); each junction type (linkage
+  bond or attached derivative) leaves a fixed excess that is removed on the junction
+  atoms and their bonded neighbours, so the chain total is exactly 0 for any topology.
+  Against HF/6-31G* ESPs of G–G dimers this lowers the RMS error from 5–7 to 2.7–3.4
+  kcal/mol/e for β-O-4, α-O-4, β-5, 4-O-5 and β-β.  The charge report lists the
+  junction corrections (``topo.charge_corrections``).  *Behaviour change:* charges of
+  existing chains differ slightly from earlier versions.
 
 * **Atomistic MD workflow** (``lignoforge.md``, ``--format md``): box,
   solvation (TIP3P/SPC/E or vacuum), EM, NVT, NPT and production ``.mdp``

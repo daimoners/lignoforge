@@ -23,8 +23,9 @@ MODEL_STATUS = {
                   "(grompp); two torsions are analogues (see docs)."},
     "opls_charges": {
         "status": "provisional",
-        "detail": "OPLS-AA fragment charges with per-residue neutralisation "
-                  "(shifts ≤ ~0.013 e); not compared with RESP/DFT."},
+        "detail": "OPLS-AA fragment charges with a local correction per junction "
+                  "(single-atom changes ≤ ~0.05 e); checked against HF/6-31G* ESPs of "
+                  "G–G dimers only, not against RESP of the full set."},
     "cg_model": {
         "status": "provisional",
         "detail": "Bond r0 from MMFF ensembles; force constants, bead sizes and "
