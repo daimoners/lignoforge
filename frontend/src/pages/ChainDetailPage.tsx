@@ -76,6 +76,11 @@ function StructureTab({ p, c }: { p: string; c: ChainRecord }) {
           <dt>Seed</dt><dd>{c.resolved.seed}</dd>
           <dt>Branching</dt><dd>{c.resolved.branching || "linear"}</dd>
           <dt>Max degree</dt><dd>{c.stats.max_degree}</dd></dl>
+        {c.derivatization_report && c.derivatization_report.rules.length > 0 && <div className="small" style={{ marginTop: 10 }}>
+          <b>Chemical modification</b>
+          <table><tbody>{c.derivatization_report.rules.map(r => <tr key={r.site}>
+            <td>{r.site} OH</td><td>{r.reagent === "methyl" ? "methyl ether" : r.reagent}</td>
+            <td className="num">{r.reacted_sites}/{r.available_sites}</td><td className="num muted">{(r.degree_of_substitution * 100).toFixed(0)}%</td></tr>)}</tbody></table></div>}
         <div className="small muted" style={{ marginTop: 8, wordBreak: "break-all" }}>SMILES<br /><code>{c.stats.smiles}</code></div>
         <button className="btn small" style={{ marginTop: 8 }} onClick={() => navigator.clipboard?.writeText(c.stats.smiles ?? "")}>Copy SMILES</button>
       </Card></div></div>}</WithTopology>;

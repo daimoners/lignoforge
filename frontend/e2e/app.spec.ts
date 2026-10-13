@@ -121,6 +121,48 @@ test("run an atomistic simulation and analyse it", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText(/water/i);
 });
 
+test("chemical modification: acetylate phenolic OH and inspect the ester types", async ({ page }) => {
+  await page.goto(`/p/${encodeURIComponent(PROJECT)}/chains/new`);
+  await page.getByLabel("Name (optional)").fill("acetylated-4mer");
+  await page.getByLabel("Number of monomers").fill("4");
+  await page.getByLabel("H weight value").fill("0");
+  await expect(page.getByText("No modification")).toBeVisible();
+  await page.getByRole("button", { name: "Add modification" }).click();
+  await page.getByLabel("Site").selectOption("phenolic");
+  await page.getByLabel("Reagent").selectOption("acetyl");
+  await expect(page.getByText(/Modification: phenolic OH → acetyl \(100%\)/)).toBeVisible();
+  await page.getByRole("button", { name: "Build chain" }).click();
+  await expect(page).toHaveURL(/chains\/c0002/);
+  await waitBadge(page, "ready");
+  const spec = page.locator(".card", { hasText: "Specification" }).first();
+  await expect(spec.getByText("Chemical modification")).toBeVisible();
+  await expect(spec.getByText("phenolic OH")).toBeVisible();
+  await page.getByRole("link", { name: "Force field" }).click();
+  await expect(page.getByText("ester carbonyl C").first()).toBeVisible();
+  await expect(page.getByText("phenyl-ester O").first()).toBeVisible();
+  await page.getByRole("link", { name: "Charges" }).click();
+  await expect(page.getByText(/Total chain charge/)).toContainText("+0.0000");
+});
+
+test("CG parametrisation: quick job runs through all stages", async ({ page }) => {
+  const base = `/p/${encodeURIComponent(PROJECT)}`;
+  await page.goto(`${base}/cgparam`);
+  await expect(page.getByText("No parametrisation jobs yet")).toBeVisible();
+  await page.getByRole("link", { name: "New parametrisation" }).click();
+  await page.getByRole("button", { name: "Quick test" }).click();
+  await page.getByLabel("Name (optional)").fill("quick-cg");
+  await page.getByLabel("Iterations").fill("2");
+  await page.getByRole("button", { name: "Start parametrisation" }).click();
+  await expect(page).toHaveURL(/cgparam\/j0001/);
+  await waitBadge(page, "done", 400_000);
+  await expect(page.getByText("Non-bonded parameters")).toBeVisible();
+  await expect(page.getByText("Validation (constant pressure)")).toBeVisible();
+  await expect(page.getByRole("link", { name: "cg_params.json" })).toBeVisible();
+  await expect(page.locator(".log")).toContainText("stage export: done");
+  await page.goto(`${base}/cgparam`);
+  await expect(page.getByRole("link", { name: "quick-cg" })).toBeVisible();
+});
+
 test("dark theme renders the chain page legibly", async ({ page }) => {
   await page.goto("/");
   if ((await page.locator("html").getAttribute("data-theme")) !== "dark")

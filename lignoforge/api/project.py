@@ -9,6 +9,7 @@ A project is a folder::
     runs/<id>/              run.json, log.txt, work/ (inputs and outputs)
     analyses/<id>/          analysis.json (parameters + results)
     cg/<id>/                parameters.json (+ fit report)
+    cgparam/<id>/           job.json, log.txt, work/ (CG parametrisation job: config, runs, results)
 
 Everything the command line, notebooks and the web interface do goes through
 this class, so all three behave identically and every result is reproducible
@@ -98,7 +99,8 @@ class Project:
         return d
 
     def _ids(self, kind: str) -> List[str]:
-        return sorted(p.name for p in (self.root / kind).iterdir() if p.is_dir())
+        base = self.root / kind
+        return sorted(p.name for p in base.iterdir() if p.is_dir()) if base.is_dir() else []
 
     def _dir(self, kind: str, rid: str) -> Path:
         d = self.root / kind / rid
@@ -165,6 +167,11 @@ class Project:
                     [resolved["monomers"][k] for k in monomer_types],
                     [resolved["linkages"][k] for k in linkage_names],
                     resolved["seed"], resolved["branching"])
+                if resolved.get("derivatization"):
+                    from lignoforge.core.derivatization import derivatize_polymer
+                    polymer, deriv_report = derivatize_polymer(
+                        polymer, resolved["derivatization"], seed=resolved["seed"])
+                    rec["derivatization_report"] = _jsonable(deriv_report)
                 chain = MolecularStructureGenerator().polymer_atomistic_topology(
                     polymer, random_seed=resolved["seed"],
                     optimize_3d=bool(spec.get("optimize", True)),
@@ -526,3 +533,111 @@ class Project:
         return self.save_cg_parameters(params.to_dict(), name=name,
                                        source=f"boltzmann-inversion:{','.join(run_ids)}",
                                        report=report)
+
+    # ── CG parametrisation jobs (lignoforge.cgfit) ────────────────────────────
+
+    def start_cgparam(self, config: Optional[dict] = None, name: Optional[str] = None,
+                      threads: int = 0, gmx: str = "gmx") -> dict:
+        """
+        Launch a CG parametrisation job (atomistic reference + CG optimisation) as a
+        detached process; ``config`` overrides :data:`lignoforge.cgfit.DEFAULT_CONFIG`.
+        """
+        import copy
+        import sys
+
+        from lignoforge.cgfit import CGParamJob, DEFAULT_CONFIG
+        from lignoforge.cgfit.workflow import _merge
+
+        cfg = _merge(copy.deepcopy(DEFAULT_CONFIG), config or {})
+        gmx = cfg.get("gmx") or gmx
+        if shutil.which(gmx) is None:
+            raise ProjectError("GROMACS ('gmx') was not found on PATH; "
+                               "install it to run simulations.")
+        if threads and not cfg["atomistic"]["mdrun_args"]:
+            cfg["atomistic"]["mdrun_args"] = ["-ntmpi", "1", "-ntomp", str(threads)]
+        if threads and not cfg["cg"]["mdrun_args"]:
+            cfg["cg"]["mdrun_args"] = ["-ntmpi", "1", "-ntomp", str(threads)]
+        jid = next_id(self.root / "cgparam", "j")
+        d = self.root / "cgparam" / jid
+        work = d / "work"
+        work.mkdir()
+        try:
+            CGParamJob(work, cfg, gmx=gmx)               # validates and writes config.json
+        except Exception as e:                           # noqa: BLE001
+            shutil.rmtree(d, ignore_errors=True)
+            raise ProjectError(f"Invalid CG parametrisation configuration: {e}") from e
+        (work / "run.sh").write_text(
+            f'#!/usr/bin/env bash\nexec "{sys.executable}" -m lignoforge.cli.cg_param run . --gmx "$GMX"\n')
+        rec = {"id": jid, "name": name or f"cg-param-{jid}", "config": cfg, "status": "running",
+               "created": now(), "started": now(), "pid": None, "exit_code": None, "error": None,
+               "cancel_requested": False, "gmx": gmx, "lignoforge_version": lignoforge_version()}
+        rec["pid"] = runner.start(work, d / "log.txt", threads, gmx)
+        write_json(d / "job.json", rec)
+        return self.cgparam(jid)
+
+    def cgparams(self) -> List[dict]:
+        return [self.cgparam(j) for j in self._ids("cgparam")]
+
+    def cgparam(self, jid: str) -> dict:
+        d = self._dir("cgparam", jid)
+        with _LOCK:
+            rec = read_json(d / "job.json")
+            before = rec["status"]
+            rec = runner.resolve_status(rec, d / "work")
+            if rec["status"] != before:
+                rec["finished"] = now()
+                write_json(d / "job.json", rec)
+        work = d / "work"
+        rec["stages"] = read_json(work / "state.json") if (work / "state.json").exists() else {}
+        rec["progress"] = (read_json(work / "progress.json")
+                           if (work / "progress.json").exists() else None)
+        hist = work / "cg" / "history.json"
+        rec["iterations"] = len(read_json(hist)) if hist.exists() else 0
+        if rec["status"] == "running":
+            from lignoforge.cgfit.monitor import overview
+            rec["live"] = overview(work)
+        return rec
+
+    def cgparam_results(self, jid: str) -> dict:
+        """History of the optimisation, validation report and final parameters (if present)."""
+        work = self._dir("cgparam", jid) / "work"
+
+        def load(rel):
+            p = work / rel
+            return read_json(p) if p.exists() else None
+
+        hist = load("cg/history.json") or []
+        for h in hist:                                    # keep the payload compact
+            h.pop("nonbonded", None)
+        return {"history": hist, "validation": load("validation/validation.json"),
+                "reference": load("reference/summary.json"), "bonded": load("cg/bonded_report.json"),
+                "params": load("result/cg_params.json"), "ensemble": load("chains/ensemble.json")}
+
+    def cgparam_log(self, jid: str, tail: int = 200) -> str:
+        log = self._dir("cgparam", jid) / "work" / "log.txt"
+        if not log.exists():
+            return ""
+        return "\n".join(log.read_text(errors="replace").splitlines()[-tail:])
+
+    def cgparam_file_path(self, jid: str, rel: str) -> Path:
+        base = (self._dir("cgparam", jid) / "work" / "result").resolve()
+        p = (base / rel).resolve()
+        if p.parent != base or not p.is_file():
+            raise ProjectError(f"No such result file in job {jid}: {rel}")
+        return p
+
+    def cancel_cgparam(self, jid: str) -> dict:
+        d = self._dir("cgparam", jid)
+        with _LOCK:
+            rec = read_json(d / "job.json")
+            if rec["status"] in runner.TERMINAL:
+                return self.cgparam(jid)
+            rec["cancel_requested"] = True
+            write_json(d / "job.json", rec)
+        runner.cancel(rec.get("pid"))
+        return self.cgparam(jid)
+
+    def delete_cgparam(self, jid: str) -> None:
+        if self.cgparam(jid)["status"] == "running":
+            raise ProjectError("Cancel the job before deleting it")
+        shutil.rmtree(self._dir("cgparam", jid))

@@ -34,6 +34,12 @@ class ProjectIn(BaseModel):
     name: str = Field(..., description="Project name (letters, digits, _ . - and spaces)")
 
 
+class DerivRuleIn(BaseModel):
+    site: str = Field(..., pattern="^(phenolic|benzylic|gamma)$")
+    reagent: str = Field(..., description="methyl | acetyl | acyl:<1-12>")
+    degree: float = Field(1.0, ge=0.0, le=1.0)
+
+
 class ChainSpecIn(BaseModel):
     name: Optional[str] = None
     n_monomers: Optional[int] = Field(None, ge=1, le=200)
@@ -44,6 +50,7 @@ class ChainSpecIn(BaseModel):
     optimize: bool = True
     max_iter: int = Field(300, ge=10, le=5000)
     experimental_input: Optional[Dict[str, Any]] = None
+    derivatization: List[DerivRuleIn] = Field(default_factory=list)
 
 
 class RunIn(BaseModel):
@@ -73,6 +80,12 @@ class CGFitIn(BaseModel):
     name: str = "fitted"
 
 
+class CGParamJobIn(BaseModel):
+    config: Dict[str, Any] = Field(default_factory=dict)
+    name: Optional[str] = None
+    threads: int = Field(0, ge=0)
+
+
 # ── observable catalogue (drives the analysis forms in the GUI) ───────────────
 
 OBSERVABLE_INFO = [
@@ -89,6 +102,23 @@ OBSERVABLE_INFO = [
                  "nbins": {"type": "integer", "default": 150}}},
     {"id": "energy", "label": "Energies, T, P", "needs": "edr", "options": {}},
 ]
+DERIVATIZATION_INFO = {
+    "sites": [
+        {"id": "phenolic", "label": "Phenolic OH (ring C4–OH)"},
+        {"id": "benzylic", "label": "Benzylic α-OH (formed with β-O-4)"},
+        {"id": "gamma", "label": "Primary γ-OH (Cγ–OH)"},
+    ],
+    "reagents": [
+        {"id": "methyl", "label": "Methyl ether (–OCH₃)"},
+        {"id": "acetyl", "label": "Acetyl ester (C2)"},
+        {"id": "acyl:2", "label": "Propionyl ester (C3)"},
+        {"id": "acyl:3", "label": "Butyryl ester (C4)"},
+        {"id": "acyl:5", "label": "Hexanoyl ester (C6)"},
+        {"id": "acyl:7", "label": "Octanoyl ester (C8)"},
+    ],
+    "unavailable": "Carboxylic acids and carbonyl groups are not part of the monomer model, "
+                   "so their reactions (e.g. COOH esterification, C=O reduction) are not available.",
+}
 COMMON_OPTIONS = {
     "stage": {"type": "string", "default": None},
     "molecule": {"type": "integer", "default": 0},
@@ -147,6 +177,7 @@ def create_app(workspace: Optional[str] = None, dev: bool = False) -> FastAPI:
             "linkages": [l for l in linkage_names if l != "beta-1" or ENABLE_BETA_1_LINKAGE],
             "observables": OBSERVABLE_INFO, "common_options": COMMON_OPTIONS,
             "run_kinds": ["em", "md", "cg"], "input_schema": schema,
+            "derivatization": DERIVATIZATION_INFO,
         }
 
     @app.post(f"{API}/resolve-spec")
@@ -302,6 +333,48 @@ def create_app(workspace: Optional[str] = None, dev: bool = False) -> FastAPI:
     @app.get(f"{API}/projects/{{p}}/cg/{{pid}}")
     def get_cg(p: str, pid: str) -> dict:
         return project(p).cg_parameters(pid)
+
+    # ── CG parametrisation jobs ───────────────────────────────────────────────
+
+    @app.get(f"{API}/cgparam/defaults")
+    def cgparam_defaults() -> dict:
+        from lignoforge.cgfit import SCHEMES
+        from lignoforge.cgfit.setup import make_config
+        cfg, info = make_config()
+        quick, _ = make_config(quick=True)
+        return {"config": cfg, "quick": quick, "schemes": SCHEMES, "machine": info}
+
+    @app.get(f"{API}/projects/{{p}}/cgparam")
+    def list_cgparam(p: str) -> List[dict]:
+        return project(p).cgparams()
+
+    @app.post(f"{API}/projects/{{p}}/cgparam", status_code=202)
+    def start_cgparam(p: str, body: CGParamJobIn) -> dict:
+        return project(p).start_cgparam(body.config, body.name, body.threads)
+
+    @app.get(f"{API}/projects/{{p}}/cgparam/{{j}}")
+    def get_cgparam(p: str, j: str) -> dict:
+        return project(p).cgparam(j)
+
+    @app.get(f"{API}/projects/{{p}}/cgparam/{{j}}/results")
+    def cgparam_results(p: str, j: str) -> dict:
+        return project(p).cgparam_results(j)
+
+    @app.get(f"{API}/projects/{{p}}/cgparam/{{j}}/log", response_class=PlainTextResponse)
+    def cgparam_log(p: str, j: str, tail: int = 200) -> str:
+        return project(p).cgparam_log(j, tail)
+
+    @app.get(f"{API}/projects/{{p}}/cgparam/{{j}}/files/{{name}}")
+    def cgparam_file(p: str, j: str, name: str):
+        return FileResponse(project(p).cgparam_file_path(j, name), filename=name)
+
+    @app.post(f"{API}/projects/{{p}}/cgparam/{{j}}/cancel")
+    def cancel_cgparam(p: str, j: str) -> dict:
+        return project(p).cancel_cgparam(j)
+
+    @app.delete(f"{API}/projects/{{p}}/cgparam/{{j}}", status_code=204)
+    def delete_cgparam(p: str, j: str) -> None:
+        project(p).delete_cgparam(j)
 
     # ── static front-end (built bundle) ───────────────────────────────────────
 

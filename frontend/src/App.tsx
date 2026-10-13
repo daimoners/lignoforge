@@ -12,6 +12,9 @@ import { RunDetailPage } from "./pages/RunDetailPage";
 import { AnalysisListPage } from "./pages/AnalysisListPage";
 import { NewAnalysisPage } from "./pages/NewAnalysisPage";
 import { AnalysisDetailPage } from "./pages/AnalysisDetailPage";
+import { CGParamListPage } from "./pages/CGParamListPage";
+import { NewCGParamPage } from "./pages/NewCGParamPage";
+import { CGParamDetailPage } from "./pages/CGParamDetailPage";
 import { Empty } from "./components/ui";
 
 export default function App() {
@@ -28,6 +31,9 @@ export default function App() {
           <Route path="runs" element={<RunsPage />} />
           <Route path="runs/new" element={<NewRunPage />} />
           <Route path="runs/:rid" element={<RunDetailPage />} />
+          <Route path="cgparam" element={<CGParamListPage />} />
+          <Route path="cgparam/new" element={<NewCGParamPage />} />
+          <Route path="cgparam/:jid" element={<CGParamDetailPage />} />
           <Route path="analysis" element={<AnalysisListPage />} />
           <Route path="analysis/new" element={<NewAnalysisPage />} />
           <Route path="analysis/:aid" element={<AnalysisDetailPage />} />

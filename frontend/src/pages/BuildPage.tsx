@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { ChainSpec, Monomer, ResolvedSpec } from "../api/types";
+import type { ChainSpec, DerivRule, Monomer, ResolvedSpec } from "../api/types";
 import { Alert, Card, Field, Loading, NumberInput, PageHead } from "../components/ui";
 import { Topbar } from "../components/Layout";
 import { MONOMER_COLOR, MONOMER_NAME, linkLabel } from "../lib/format";
@@ -48,11 +48,13 @@ export function BuildPage() {
   const [process, setProcess] = useState("kraft");
   const [jsonText, setJsonText] = useState("");
   const [showJson, setShowJson] = useState(false);
+  const [deriv, setDeriv] = useState<DerivRule[]>([]);
 
   const spec: ChainSpec = useMemo(() => ({
     n_monomers: n === "" ? undefined : n, seed: seed === "" ? 42 : seed, branching, optimize,
     monomers: mono, linkages: Object.fromEntries(Object.entries(links).filter(([, v]) => v > 0)),
-  }), [n, seed, branching, optimize, mono, links]);
+    derivatization: deriv.filter(d => d.degree > 0),
+  }), [n, seed, branching, optimize, mono, links, deriv]);
   const dspec = useDebounced(spec);
   const sumM = Object.values(mono).reduce((a, b) => a + b, 0);
   const sumL = Object.values(links).reduce((a, b) => a + b, 0);
@@ -135,6 +137,32 @@ export function BuildPage() {
               <NumberInput value={links[l] ?? 0} min={0} max={100} ariaLabel={`${l} weight value`} onChange={v => setLinks({ ...links, [l]: v === "" ? 0 : v })} /></div>)}
               <span className="hint muted small">β-1 is not supported by the structure builder and is therefore not offered.</span></div>
           </Card>
+                  <Card title="Chemical modification (optional)" actions={<span className="muted small">virtual derivatisation of OH groups</span>}>
+            <div className="stack">
+              <p className="muted small" style={{ margin: 0 }}>Mask free hydroxyl groups the way an experiment would (methylation, acetylation, longer esters).
+                The degree is the fraction of the available sites of that kind that react; sites are chosen at random from the seed.</p>
+              {deriv.length === 0 && <span className="muted small">No modification: the chain keeps all its free OH groups.</span>}
+              {deriv.map((d, i) => (
+                <div key={i} className="form-grid" style={{ gridTemplateColumns: "1.2fr 1.2fr 1fr auto", alignItems: "end" }}>
+                  <Field label="Site"><select value={d.site} onChange={e => setDeriv(deriv.map((x, j) => (j === i ? { ...x, site: e.target.value } : x)))}>
+                    {cat.data!.derivatization.sites.map(o => <option key={o.id} value={o.id} disabled={deriv.some((x, j) => j !== i && x.site === o.id)}>{o.label}</option>)}</select></Field>
+                  <Field label="Reagent"><select value={d.reagent} onChange={e => setDeriv(deriv.map((x, j) => (j === i ? { ...x, reagent: e.target.value } : x)))}>
+                    {cat.data!.derivatization.reagents.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}</select></Field>
+                  <Field label={`Degree: ${Math.round(d.degree * 100)}%`}><input type="range" min={0} max={100} step={5} value={Math.round(d.degree * 100)}
+                    aria-label={`Degree of substitution ${i + 1}`} onChange={e => setDeriv(deriv.map((x, j) => (j === i ? { ...x, degree: Number(e.target.value) / 100 } : x)))} /></Field>
+                  <button type="button" className="btn small" aria-label={`Remove modification ${i + 1}`} onClick={() => setDeriv(deriv.filter((_, j) => j !== i))}>Remove</button>
+                </div>))}
+              <div className="row">
+                <button type="button" className="btn small" disabled={deriv.length >= cat.data!.derivatization.sites.length}
+                  onClick={() => {
+                    const free = cat.data!.derivatization.sites.find(s => !deriv.some(d => d.site === s.id));
+                    if (free) setDeriv([...deriv, { site: free.id, reagent: "acetyl", degree: 1 }]);
+                  }}>Add modification</button>
+                {deriv.length > 0 && <button type="button" className="btn small ghost" onClick={() => setDeriv([])}>Clear</button>}
+              </div>
+              <span className="hint muted small">{cat.data!.derivatization.unavailable}</span>
+            </div>
+          </Card>
         </div>
 
         <div className="stack" style={{ position: "sticky", top: 70 }}>
@@ -144,6 +172,8 @@ export function BuildPage() {
               <hr style={{ border: 0, borderTop: "1px solid var(--border)", width: "100%" }} />
               <Bars items={Object.entries(r.linkages).filter(([, v]) => v > 0).map(([k, v]) => [linkLabel(k), v] as [string, number])} />
               {r.warnings.map(w => <Alert key={w} kind="warn">{w}</Alert>)}
+              {r.derivatization && r.derivatization.length > 0 && <div className="small">Modification: {r.derivatization.map(d =>
+                `${d.site} OH → ${d.reagent === "methyl" ? "methyl ether" : d.reagent === "acetyl" ? "acetyl" : d.reagent} (${Math.round(d.degree * 100)}%)`).join("; ")}</div>}
               <span className="small muted">{r.n_monomers} monomers · seed {r.seed} · {r.branching > 0 ? `branching ${r.branching}` : "linear"}</span>
             </div>}
           </Card>

@@ -58,6 +58,15 @@ CASES = {
     "BR":  (10, (0.2, 0.5, 0.3), {"beta-O-4": 3, "4-O-5": 1, "5-5": 1}, 0.4),
 }
 
+# derivatised variants: name -> (base case, rules)
+_ALL3 = ("phenolic", "benzylic", "gamma")
+DERIV_CASES = {
+    "D_Me":   ("P1", [{"site": s, "reagent": "methyl", "degree": 1.0} for s in _ALL3]),
+    "D_Ac":   ("P1", [{"site": s, "reagent": "acetyl", "degree": 1.0} for s in _ALL3]),
+    "D_Bu50": ("ALL", [{"site": s, "reagent": "acyl:3", "degree": 0.5} for s in _ALL3]),
+    "D_AcPh": ("P3", [{"site": "phenolic", "reagent": "acetyl", "degree": 1.0}]),
+}
+
 ATOM_MASS = {"C": 12.011, "H": 1.008, "O": 15.999}
 
 
@@ -258,7 +267,8 @@ def random_cases(k, seed=0):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--cases", default=",".join(CASES), help="comma list (default: all)")
+    ap.add_argument("--cases", default=",".join(list(CASES) + list(DERIV_CASES)),
+                    help="comma list (default: all, including derivatised D_*)")
     ap.add_argument("--seeds", default="42", help="comma list of seeds (default: 42)")
     ap.add_argument("--random", type=int, default=0, help="add N random chains")
     ap.add_argument("--md", action="store_true", help="add a 20 ps vacuum MD check")
@@ -266,7 +276,8 @@ def main(argv=None) -> int:
     ap.add_argument("--keep", action="store_true", help="keep outputs of passing cases")
     args = ap.parse_args(argv)
 
-    cases = {**CASES, **random_cases(args.random)}
+    cases = {**CASES, **{k: CASES[b] for k, (b, _) in DERIV_CASES.items()},
+             **random_cases(args.random)}
     names = [c for c in args.cases.split(",") if c in cases] + \
             [c for c in cases if c.startswith("R")]
     seeds = [int(s) for s in args.seeds.split(",")]
@@ -285,6 +296,10 @@ def main(argv=None) -> int:
         try:
             p, warns = grow(n, mono, linkages, branching, seed)
             res.notes += warns
+            if name in DERIV_CASES:
+                from lignoforge.core.derivatization import derivatize_polymer
+                p, rep = derivatize_polymer(p, DERIV_CASES[name][1], seed=seed)
+                res.notes.append(f"derivatised: {rep.get('n_reacted', rep)}")
             check_growth(res, p, n, branching)
             check_chemistry(res, p)
             chain = make_chain(p, seed)

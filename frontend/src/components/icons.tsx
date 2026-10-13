@@ -11,3 +11,4 @@ export const IconAnalysis = () => <I><path d="M4 20V4M4 20h16" /><path d="M8 15l
 export const IconSystem = () => <I><rect x="5" y="5" width="14" height="14" rx="2" /><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3" /></I>;
 export const IconSun = () => <I><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></I>;
 export const IconMoon = () => <I><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></I>;
+export const IconCG = () => <I><circle cx="7" cy="8" r="3" /><circle cx="17" cy="8" r="3" /><circle cx="12" cy="17" r="3" /><path d="M10 8h4M8.5 10.5l2 4.5M15.5 10.5l-2 4.5" /></I>;

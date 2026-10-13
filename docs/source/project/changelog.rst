@@ -44,6 +44,24 @@ Removed
   ``pdb2gmx`` / RTP route linked only residues *i* and *i+1* and is replaced
   by ``lignoforge.forcefield``.  The files remain in the git history (v0.2.1).
 
+* **Virtual chemical derivatisation** (``lignoforge.core.derivatization``,
+  ``lignoforge-chain --derivatize SITE:REAGENT[:DEGREE]``, ``derivatization`` in
+  the chain specification of the Python/REST API): methylation, acetylation and
+  longer acyl esterification of phenolic, benzylic (α) and γ hydroxyls, with a
+  controllable degree of substitution.  The modified molecules use OPLS-AA
+  ester/ether types (opls_465/466/467, aryl ester 472/473, 490/491, 180) with
+  planarity impropers on the carbonyl carbons; four ester torsions absent from
+  ``ffbonded.itp`` are added as analogues.  Carboxylic acids and carbonyls are
+  not part of the monomer model, so their reactions are not available.
+  The web interface exposes it in the *Build* page (card "Chemical modification") and
+  reports the achieved degree of substitution on the chain page.
+* **CG parametrisation tool** (``lignoforge.cgfit``, ``lignoforge-cg-param``,
+  *CG parametrisation* page of the web interface): builds and runs an atomistic
+  OPLS-AA bulk reference of lignin with GROMACS, maps it onto beads (two beads
+  per monomer or one), fits bonded terms by Boltzmann inversion and Lennard-Jones
+  non-bonded terms by relative-entropy minimisation with a pressure correction,
+  validates the result at constant pressure and exports a CG bulk system.  Includes
+  an optimiser self-test on a synthetic reference.  See :ref:`cg_parametrisation`.
 * **Project API** (``lignoforge.api``): UI-independent service layer
   (``Project``) with on-disk, versioned records for chains, local GROMACS runs,
   analyses and CG parameter sets; shared by CLI, notebooks and the web

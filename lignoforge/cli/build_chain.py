@@ -135,6 +135,23 @@ def _positive_float(v: str) -> float:
     return x
 
 
+def _parse_derivatize(spec: str) -> dict:
+    """``site:reagent[:degree]`` where reagent may be ``acyl:<n>`` (so up to 4 fields)."""
+    parts = spec.split(":")
+    if len(parts) < 2:
+        raise ValueError(f"'{spec}': expected SITE:REAGENT[:DEGREE]")
+    site, rest = parts[0], parts[1:]
+    reagent = rest.pop(0)
+    if reagent == "acyl":
+        if not rest:
+            raise ValueError(f"'{spec}': acyl needs a chain length, e.g. acyl:3")
+        reagent += ":" + rest.pop(0)
+    degree = float(rest.pop(0)) if rest else 1.0
+    if rest:
+        raise ValueError(f"'{spec}': too many fields")
+    return {"site": site, "reagent": reagent, "degree": degree}
+
+
 # ── Argument parser ────────────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -188,6 +205,13 @@ def _build_parser() -> argparse.ArgumentParser:
     bg.add_argument("--branching", metavar="F", type=_fraction, default=0.0,
                     help="Branching propensity per MC step "
                          "(0 = strictly linear, default).")
+
+    # ── Derivatisation ──────────────────────────────────────────────────────────
+    dg = p.add_argument_group("Chemical derivatisation (virtual masking of OH groups)")
+    dg.add_argument("--derivatize", metavar="SITE:REAGENT[:DEGREE]", action="append", default=[],
+                    help="Modify free OH groups; repeatable. SITE = phenolic | benzylic | gamma; "
+                         "REAGENT = methyl | acetyl | acyl:<n>; DEGREE 0-1 (default 1). "
+                         "Example: --derivatize phenolic:acetyl:1 --derivatize gamma:methyl:0.5")
 
     # ── Simulation ──────────────────────────────────────────────────────────────
     simg = p.add_argument_group("Simulation")
@@ -655,6 +679,14 @@ def main(argv: Optional[list] = None) -> int:
     seeds:      list = []
     all_stats:  list = []
 
+    from lignoforge.core.builder import normalise_derivatization
+    try:
+        deriv_rules = normalise_derivatization(
+            [_parse_derivatize(x) for x in args.derivatize])
+    except (ValueError, IndexError) as e:
+        print(f"[error] Invalid --derivatize: {e}", file=sys.stderr)
+        return 1
+
     for i in range(args.n_chains):
         chain_seed = args.seed + i
         print(f"  Chain {i + 1}/{args.n_chains}  (seed={chain_seed})")
@@ -679,6 +711,12 @@ def main(argv: Optional[list] = None) -> int:
             traceback.print_exc()
             continue
 
+        if deriv_rules:
+            from lignoforge.core.derivatization import derivatize_polymer
+            polymer, drep = derivatize_polymer(polymer, deriv_rules, seed=chain_seed)
+            print("    derivatised: " + ", ".join(
+                f"{r['site']}/{r['reagent']} {r['reacted_sites']}/{r['available_sites']}"
+                for r in drep["rules"]))
         stats = Characterize(polymer).summary()
         stats["chain_index"] = i
         stats["seed"]        = chain_seed

@@ -1,6 +1,6 @@
 import type {
   AnalysisRecord, Catalog, ChainGraph, ChainRecord, ChainSpec, ChargeReport, CGSet,
-  ProjectInfo, ResolvedSpec, RunFile, RunRecord, SystemInfo, Topology,
+  CGParamDefaults, CGParamJob, CGParamResults, ProjectInfo, ResolvedSpec, RunFile, RunRecord, SystemInfo, Topology,
 } from "./types";
 
 export class ApiError extends Error {
@@ -74,4 +74,15 @@ export const api = {
   deleteAnalysis: (p: string, a: string) => del(`${P(p)}/analyses/${a}`),
 
   cgSets: (p: string) => req<CGSet[]>(`${P(p)}/cg`),
+
+  cgparamDefaults: () => req<CGParamDefaults>("/cgparam/defaults"),
+  cgparams: (p: string) => req<CGParamJob[]>(`${P(p)}/cgparam`),
+  cgparam: (p: string, j: string) => req<CGParamJob>(`${P(p)}/cgparam/${j}`),
+  startCgparam: (p: string, body: { config: Record<string, unknown>; name?: string; threads: number }) =>
+    post<CGParamJob>(`${P(p)}/cgparam`, body),
+  cgparamResults: (p: string, j: string) => req<CGParamResults>(`${P(p)}/cgparam/${j}/results`),
+  cgparamLog: (p: string, j: string, tail = 300) => req<string>(`${P(p)}/cgparam/${j}/log?tail=${tail}`),
+  cgparamFileUrl: (p: string, j: string, name: string) => `${BASE}${P(p)}/cgparam/${j}/files/${enc(name)}`,
+  cancelCgparam: (p: string, j: string) => post<CGParamJob>(`${P(p)}/cgparam/${j}/cancel`),
+  deleteCgparam: (p: string, j: string) => del(`${P(p)}/cgparam/${j}`),
 };

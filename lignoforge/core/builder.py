@@ -16,7 +16,8 @@ import numpy as np
 
 from lignoforge.core.rules import linkage_names, monomer_types
 
-__all__ = ["resolve_spec", "grow_chain_exact", "normalise_fractions"]
+__all__ = ["resolve_spec", "grow_chain_exact", "normalise_fractions",
+           "normalise_derivatization"]
 
 _DEFAULT_INPUT = {
     "material_origin": {"biomass_type": "hardwood"},
@@ -31,6 +32,25 @@ def normalise_fractions(values: Dict[str, float], keys) -> Dict[str, float]:
     if total <= 0:
         raise ValueError(f"All fractions are zero for {list(keys)}")
     return {k: float(x) for k, x in zip(keys, v / total)}
+
+
+def normalise_derivatization(rules) -> list:
+    """Validate and normalise a list of derivatisation rules (see :mod:`lignoforge.core.derivatization`)."""
+    from lignoforge.core.derivatization import SITE_KINDS, parse_reagent
+    out, seen = [], set()
+    for r in rules or []:
+        site, reagent = r.get("site"), r.get("reagent")
+        if site not in SITE_KINDS:
+            raise ValueError(f"Unknown derivatisation site '{site}' (use {SITE_KINDS})")
+        parse_reagent(str(reagent))                       # raises on unknown reagent
+        deg = float(r.get("degree", 1.0))
+        if not 0.0 <= deg <= 1.0:
+            raise ValueError("Derivatisation degree must be between 0 and 1")
+        if site in seen:
+            raise ValueError(f"Site '{site}' appears in more than one derivatisation rule")
+        seen.add(site)
+        out.append({"site": site, "reagent": str(reagent).lower(), "degree": deg})
+    return out
 
 
 def resolve_spec(spec: dict) -> dict:
@@ -97,6 +117,7 @@ def resolve_spec(spec: dict) -> dict:
         "monomers": normalise_fractions(monomers, monomer_types),
         "linkages": normalise_fractions(linkages, linkage_names),
         "branching": float(spec.get("branching") or 0.0),
+        "derivatization": normalise_derivatization(spec.get("derivatization")),
         "seed": seed,
         "warnings": notes,
     }
@@ -154,3 +175,36 @@ def grow_chain_exact(
             )
             break
     return polymer
+
+
+def build_chain_dict(spec: dict, optimize: bool = True, max_iter: int = 300):
+    """
+    Build one atomistic chain from a chain *spec* (see :func:`resolve_spec`).
+
+    Returns ``(chain, report)`` where *chain* is the atomistic topology dict
+    used by :func:`lignoforge.forcefield.build_chain_topology` and *report* has
+    the resolved specification and the derivatisation report (if any).
+    """
+    import warnings
+
+    from lignoforge.core.rules import linkage_names, monomer_types
+    from lignoforge.structure.generator import MolecularStructureGenerator
+
+    resolved = resolve_spec(spec)
+    report = {"resolved": resolved, "derivatization": None, "warnings": list(resolved["warnings"])}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        polymer = grow_chain_exact(
+            resolved["n_monomers"],
+            [resolved["monomers"][k] for k in monomer_types],
+            [resolved["linkages"][k] for k in linkage_names],
+            resolved["seed"], resolved["branching"])
+        if resolved.get("derivatization"):
+            from lignoforge.core.derivatization import derivatize_polymer
+            polymer, report["derivatization"] = derivatize_polymer(
+                polymer, resolved["derivatization"], seed=resolved["seed"])
+        chain = MolecularStructureGenerator().polymer_atomistic_topology(
+            polymer, random_seed=resolved["seed"], optimize_3d=optimize,
+            max_uff_iterations=max_iter)
+    report["warnings"] += [str(w.message) for w in caught]
+    return chain, report

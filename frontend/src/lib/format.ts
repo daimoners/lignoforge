@@ -48,3 +48,9 @@ export const nice = (x: number) => Number(x.toPrecision(12));
 export const PALETTE = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759", "#76b7b2", "#edc948",
   "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac", "#86bcb6", "#d37295", "#8cd17d", "#a0cbe8",
   "#ffbe7d", "#b6992d"];
+
+export function fmtEta(sec?: number | null): string {
+  if (sec == null || !isFinite(sec)) return "unknown";
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m ${Math.floor(sec % 60)}s`;
+}

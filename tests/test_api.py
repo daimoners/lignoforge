@@ -320,3 +320,44 @@ def test_unknown_api_routes_are_404_not_the_app_shell(client):
     """With the front-end bundle installed, /api/... typos must not return index.html."""
     assert client.get("/api/v1/nope").status_code == 404
     assert client.get("/api/v1/projects/x/nope/y").status_code == 404
+
+
+def test_http_catalog_offers_derivatization_and_builds_with_it(client):
+    cat = client.get("/api/v1/catalog").json()["derivatization"]
+    assert {s["id"] for s in cat["sites"]} == {"phenolic", "benzylic", "gamma"}
+    assert {"methyl", "acetyl", "acyl:3"} <= {r["id"] for r in cat["reagents"]}
+    assert "carboxylic" in cat["unavailable"].lower()
+    spec = {"n_monomers": 3, "monomers": {"G": 1}, "linkages": {"beta-O-4": 1},
+            "derivatization": [{"site": "phenolic", "reagent": "acetyl", "degree": 1.0}]}
+    r = client.post("/api/v1/resolve-spec", json=spec).json()
+    assert r["derivatization"][0]["site"] == "phenolic"
+    bad = dict(spec, derivatization=[{"site": "ortho", "reagent": "acetyl", "degree": 1.0}])
+    assert client.post("/api/v1/resolve-spec", json=bad).status_code == 422
+    bad2 = dict(spec, derivatization=[{"site": "gamma", "reagent": "ethyl", "degree": 1.0}])
+    assert client.post("/api/v1/resolve-spec", json=bad2).status_code == 400
+
+
+@pytest.mark.skipif(shutil.which("gmx") is None, reason="GROMACS not installed")
+def test_http_cgparam_job_lifecycle(client):
+    d = client.get("/api/v1/cgparam/defaults").json()
+    assert "ring-side" in d["schemes"] and d["config"]["scheme"] == "ring-side"
+    client.post("/api/v1/projects", json={"name": "cgp"})
+    cfg = {"atomistic": {"compress_ps": 10, "equil_ps": 10, "prod_ps": 20, "out_ps": 2},
+           "cg": {"iterations": 1, "iter_ps": 40, "validate_ps": 40, "out_ps": 1},
+           **{k: d["quick"][k] for k in ("ensemble",)}}
+    cfg["cg"].update(cutoff=0.8, min_samples=50)
+    j = client.post("/api/v1/projects/cgp/cgparam", json={"config": cfg, "threads": 2}).json()
+    for _ in range(400):
+        j = client.get(f"/api/v1/projects/cgp/cgparam/{j['id']}").json()
+        if j["status"] != "running":
+            break
+        time.sleep(1.0)
+    assert j["status"] == "done", client.get(f"/api/v1/projects/cgp/cgparam/{j['id']}/log").text
+    assert j["stages"]["export"]["status"] == "done" and j["iterations"] == 1
+    r = client.get(f"/api/v1/projects/cgp/cgparam/{j['id']}/results").json()
+    assert r["params"]["scheme"] == "ring-side" and r["validation"]["checks"]
+    assert "stage export" in client.get(f"/api/v1/projects/cgp/cgparam/{j['id']}/log").text
+    f = client.get(f"/api/v1/projects/cgp/cgparam/{j['id']}/files/cg_params.json")
+    assert f.status_code == 200
+    assert client.get(f"/api/v1/projects/cgp/cgparam/{j['id']}/files/..%2Fconfig.json").status_code in (400, 404)
+    assert client.delete(f"/api/v1/projects/cgp/cgparam/{j['id']}").status_code == 204

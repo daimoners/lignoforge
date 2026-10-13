@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet, useMatch } from "react-router-dom";
 import { useSystem } from "../lib/hooks";
 import { useTheme } from "../lib/theme";
-import { IconAnalysis, IconChains, IconMoon, IconOverview, IconProjects, IconRuns, IconSun, IconSystem } from "./icons";
+import { IconAnalysis, IconCG, IconChains, IconMoon, IconOverview, IconProjects, IconRuns, IconSun, IconSystem } from "./icons";
 
 const cls = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : "");
 
@@ -25,6 +25,7 @@ export function Layout() {
             <NavLink to={base} end className={cls}><IconOverview /> Overview</NavLink>
             <NavLink to={`${base}/chains`} className={cls}><IconChains /> Chains</NavLink>
             <NavLink to={`${base}/runs`} className={cls}><IconRuns /> Simulations</NavLink>
+            <NavLink to={`${base}/cgparam`} className={cls}><IconCG /> CG parametrisation</NavLink>
             <NavLink to={`${base}/analysis`} className={cls}><IconAnalysis /> Analysis</NavLink>
           </>}
         </nav>

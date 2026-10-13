@@ -1,5 +1,8 @@
 /** Short descriptions of the OPLS-AA types LignoForge assigns (see docs: OPLS-AA parametrisation). */
 export const OPLS_INFO: Record<string, string> = {
+  opls_135: "CH₃ alkane (acyl chain end)",
+  opls_180: "dialkyl ether O (modified aliphatic OH)",
+  opls_182: "CH₂–O–CH₃ ether carbon (γ-methyl ether)",
   opls_136: "sp³ CH₂ (carbon neighbours only)",
   opls_137: "sp³ CH (carbon neighbours only)",
   opls_140: "H on sp³ alkyl C",
@@ -21,4 +24,11 @@ export const OPLS_INFO: Record<string, string> = {
   opls_199: "ring C bearing O (anisole-type)",
   opls_219: "benzylic alcohol carbon (Cα–OH)",
   opls_221: "ipso ring C (substituted, no H)",
+  opls_465: "ester carbonyl C (acetyl/acyl)",
+  opls_466: "ester carbonyl O (C=O)",
+  opls_467: "alkyl-ester O (–O–C=O on aliphatic C)",
+  opls_472: "ring C bearing an ester O (phenyl ester)",
+  opls_473: "phenyl-ester O (Ar–O–C=O)",
+  opls_490: "CH₂–O–C(=O) carbon (γ-ester)",
+  opls_491: "CH(Ar)–O–C(=O) carbon (α-ester)",
 };

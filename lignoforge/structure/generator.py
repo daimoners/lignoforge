@@ -45,6 +45,8 @@ def _ome_ring_side(o_node: int, G) -> int:
 def _rtp_heavy_name(node: int, G) -> str:
     """Map a heavy-atom graph node to its GROMACS/RTP atom name."""
     attrs = G.nodes[node]
+    if attrs.get("rtp_name"):          # atoms added by chemical derivatisation
+        return attrs["rtp_name"]
     elem = attrs["element"]
     idx  = int(attrs.get("index", 0))
     grp  = attrs.get("group")
@@ -89,6 +91,9 @@ def _rtp_h_name(parent_rtp: str, h_index: int, h_total: int) -> str:
     if parent_rtp == "OA":  return "HOA"
     if parent_rtp == "CM3": return f"HM3{h_index}"
     if parent_rtp == "CM5": return f"HM5{h_index}"
+    # derivatisation atoms: C<S>M -> H<S>M<i>,  C<S><k> -> H<S><k><i>
+    if len(parent_rtp) == 3 and parent_rtp[0] == "C" and parent_rtp[1] in "PAG":
+        return f"H{parent_rtp[1:]}{h_index}"
     return f"H{h_index}"
 
 

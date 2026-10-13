@@ -52,6 +52,7 @@ setuptools.setup(
         "console_scripts": [
             "lignoforge-chain = lignoforge.cli.build_chain:main",
             "lignoforge-cg-fit = lignoforge.cli.cg_fit:main",
+            "lignoforge-cg-param = lignoforge.cli.cg_param:main",
             "lignoforge = lignoforge.cli.main:main",
         ],
     },

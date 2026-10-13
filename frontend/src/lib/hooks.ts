@@ -42,6 +42,22 @@ export const useRunFiles = (p: string, r: string, running: boolean) => useQuery(
   queryKey: ["runfiles", p, r], queryFn: () => api.runFiles(p, r),
   refetchInterval: running ? 4000 : false,
 });
+export const useCgparams = (p: string) => useQuery({
+  queryKey: ["cgparams", p], queryFn: () => api.cgparams(p),
+  refetchInterval: q => (q.state.data?.some(r => live(r.status)) ? 3000 : false),
+});
+export const useCgparam = (p: string, j: string) => useQuery({
+  queryKey: ["cgparam", p, j], queryFn: () => api.cgparam(p, j),
+  refetchInterval: q => (live(q.state.data?.status) ? 2000 : false),
+});
+export const useCgparamResults = (p: string, j: string, running: boolean) => useQuery({
+  queryKey: ["cgparamres", p, j], queryFn: () => api.cgparamResults(p, j),
+  refetchInterval: running ? 5000 : false,
+});
+export const useCgparamLog = (p: string, j: string, running: boolean) => useQuery({
+  queryKey: ["cgparamlog", p, j], queryFn: () => api.cgparamLog(p, j, 400),
+  refetchInterval: running ? 3000 : false,
+});
 export const useAnalyses = (p: string) => useQuery({
   queryKey: ["analyses", p], queryFn: () => api.analyses(p),
   refetchInterval: q => (q.state.data?.some(a => a.status === "running") ? 1500 : false),
