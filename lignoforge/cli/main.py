@@ -28,6 +28,12 @@ def _gui(args: argparse.Namespace) -> int:
         print("The web interface needs extra packages: pip install 'lignoforge[gui]'",
               file=sys.stderr)
         return 1
+    from lignoforge.web.app import STATIC_DIR
+    if not (STATIC_DIR / "index.html").exists() and not args.dev:
+        print("note: the web front-end bundle is not built, so only the REST API is served.\n"
+              "      From a git clone run tools/build_frontend.sh (needs Node >= 20.19, e.g. "
+              "`conda install -c conda-forge 'nodejs>=22'`);\n"
+              "      or install a release wheel, which already contains it.", file=sys.stderr)
     app = create_app(args.workspace, dev=args.dev)
     url = f"http://{args.host}:{args.port}"
     print(f"LignoForge GUI  →  {url}\nWorkspace       →  {app.state.workspace}\n"
@@ -48,7 +54,7 @@ def _check(args: argparse.Namespace) -> int:
     print(f"LignoForge {info['lignoforge']}  (Python {info['python']})")
     g = info["gromacs"]
     print(f"  GROMACS     : {g['version'] or 'NOT FOUND'}  {g['path'] or ''}")
-    for k in ("rdkit", "mdanalysis", "networkx"):
+    for k in ("numpy", "rdkit", "mdanalysis", "networkx"):
         print(f"  {k:12s}: {info[k] or 'NOT INSTALLED'}")
     print("  Features    : " + ", ".join(f"{k}={'yes' if v else 'no'}"
                                           for k, v in info["features"].items()))

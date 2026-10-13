@@ -41,6 +41,19 @@ def _version(cmd: list) -> Optional[str]:
         return None
 
 
+def _rdkit_numpy_problem() -> Optional[str]:
+    """None if RDKit and NumPy work together (3-D embedding returns an array), else a message."""
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        m = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+        AllChem.EmbedMolecule(m, randomSeed=1)
+        m.GetConformer().GetPositions()
+        return None
+    except Exception as e:                  # noqa: BLE001
+        return f"{type(e).__name__}: {e}"
+
+
 def system_check(gmx: str = "gmx") -> dict:
     """Report installed dependencies and what features are therefore available."""
     def mod(name):
@@ -56,14 +69,17 @@ def system_check(gmx: str = "gmx") -> dict:
         "python": platform.python_version(),
         "platform": platform.platform(),
         "gromacs": {"path": gmx_path, "version": _version([gmx, "--version"]) if gmx_path else None},
+        "numpy": mod("numpy"),
         "rdkit": mod("rdkit"),
         "mdanalysis": mod("MDAnalysis"),
         "networkx": mod("networkx"),
     }
     gmx_ok = bool(info["gromacs"]["version"])
+    rdkit_problem = _rdkit_numpy_problem() if info["rdkit"] else None
+    info["rdkit_problem"] = rdkit_problem
     info["features"] = {
-        "build_structures": bool(info["rdkit"]),
-        "topology": bool(info["rdkit"]),
+        "build_structures": bool(info["rdkit"]) and not rdkit_problem,
+        "topology": bool(info["rdkit"]) and not rdkit_problem,
         "simulations": gmx_ok,
         "trajectory_analysis": bool(info["mdanalysis"]),
         "energy_analysis": gmx_ok,
@@ -71,6 +87,10 @@ def system_check(gmx: str = "gmx") -> dict:
     info["hints"] = [
         h for h in (
             None if info["rdkit"] else "RDKit missing: conda install -c conda-forge rdkit",
+            None if not rdkit_problem else
+            f"RDKit does not work with NumPy {info['numpy']} ({rdkit_problem}). Usually RDKit is too old "
+            "for NumPy 2 (or `rdkit-pypi` is installed): pip uninstall -y rdkit-pypi; "
+            "pip install -U 'rdkit>=2024.9.1'  (or: pip install 'numpy<2')",
             None if gmx_ok else "GROMACS not found on PATH: conda install -c conda-forge gromacs",
             None if info["mdanalysis"] else "MDAnalysis missing: pip install 'lignoforge[analysis]'",
         ) if h

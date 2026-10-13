@@ -42,7 +42,7 @@ setuptools.setup(
         "jsonschema>=4.0.0",
         "networkx>=2.5",
         "pysmiles>=1.0.1",
-        "rdkit-pypi>=2021.9.2.1"],
+        "rdkit>=2024.9.1"],
     extras_require={
         "gui": ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2.0"],
         "analysis": ["MDAnalysis>=2.6"],

@@ -64,6 +64,23 @@ cd lignoforge
 pip install -e .
 ```
 
+### Web interface
+
+```bash
+pip install -e ".[gui,analysis]"      # or: pip install "lignoforge[gui,analysis]"
+lignoforge gui
+```
+
+A release wheel already contains the built front-end.  From a **git clone** the
+bundle has to be built once with `tools/build_frontend.sh`, which needs
+**Node.js ≥ 20.19** (or ≥ 22.12).  If your system Node is older (e.g. 18),
+install a recent one inside your environment first:
+
+```bash
+conda install -c conda-forge "nodejs>=22"     # or: nvm install 22 && nvm use 22
+bash tools/build_frontend.sh
+```
+
 ### RDKit
 
 RDKit is required for 3-D coordinate generation and SDF/PDB export.  
@@ -73,11 +90,16 @@ The easiest installation route is via conda:
 conda install -c conda-forge rdkit
 ```
 
-Or via pip (PyPI wheel):
+Or via pip (PyPI wheel; use `rdkit`, not the abandoned `rdkit-pypi`):
 
 ```bash
-pip install rdkit
+pip install "rdkit>=2024.9.1"
 ```
+
+If you see `A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x` /
+`_ARRAY_API not found`, RDKit is too old for the installed NumPy: remove `rdkit-pypi`
+(`pip uninstall rdkit-pypi`) and upgrade RDKit as above (a quick workaround is
+`pip install "numpy<2"`).  `lignoforge check` tests the RDKit–NumPy combination.
 
 ### Full dependency list
 
@@ -89,7 +111,7 @@ pip install rdkit
 | pandas | ≥ 0.25 |
 | matplotlib | ≥ 3.1 |
 | pysmiles | ≥ 1.0.1 |
-| rdkit | ≥ 2021.09 |
+| rdkit | ≥ 2024.9.1 |
 | jsonschema | ≥ 4.0 |
 
 ---

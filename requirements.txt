@@ -8,5 +8,5 @@ pytest>=6.2.3
 jsonschema>=4.0.0
 networkx>=2.5
 pysmiles>=1.0.1
-rdkit-pypi>=2021.9.2.1
+rdkit>=2024.9.1
 
